@@ -21,7 +21,26 @@ git clone https://github.com/nucamp/soloai_starter.git nucamp_soloai
 cd nucamp_soloai
 ```
 
-### 2. Configure Environment Variables
+### 2. Initialize SvelteKit App
+
+Initialize the SvelteKit application with the required dependencies:
+
+```bash
+npx sv create nucamp_soloai
+```
+
+When prompted, select the following options:
+- **Prettier**: Yes
+- **ESLint**: Yes
+- **Tailwind CSS**: Yes
+- **SvelteKit Adapter**: Yes
+- **Paraglide**: Yes
+  - Languages: `en, fr, hi, es, pt, de, it, ur, fi, nb, ar, ru`
+- **MCP**: Yes
+
+This will set up your SvelteKit project with internationalization support for 12 languages and all necessary development tools.
+
+### 3. Configure Environment Variables
 
 #### Create and Configure `.env` File
 
@@ -80,7 +99,7 @@ MYSQL_ROOT_PASSWORD=your_secure_root_password
 
 The `.mautic_env` file should already exist. It references environment variables from your `.env` file, so no changes are needed unless you have specific Mautic configuration requirements.
 
-### 3. Install Node.js Dependencies
+### 4. Install Node.js Dependencies
 
 ```bash
 npm install
@@ -93,7 +112,7 @@ This will install all required packages for the SvelteKit application, including
 - OpenAI SDK
 - Testing tools (Playwright, Vitest)
 
-### 4. Start Docker Services
+### 5. Start Docker Services
 
 Start all Docker containers:
 
@@ -107,7 +126,7 @@ This will start the following services:
 - **Mautic** (port 8080)
 - **Nginx** (reverse proxy for Mautic)
 
-### 5. Verify Services Are Running
+### 6. Verify Services Are Running
 
 Check that all containers are running:
 
@@ -124,7 +143,7 @@ docker-compose logs -f [service-name]
 # Example: docker-compose logs -f strapi
 ```
 
-### 6. Access the Applications
+### 7. Access the Applications
 
 Once all services are running:
 
@@ -157,7 +176,7 @@ docker-compose exec db mysql -u root -p
 # Password: value of MYSQL_ROOT_PASSWORD from .env
 ```
 
-### 7. Configure Strapi API Token (Optional)
+### 8. Configure Strapi API Token (Optional)
 
 If you need to connect your SvelteKit app to Strapi:
 
