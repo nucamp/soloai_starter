@@ -17,7 +17,7 @@ Before you begin, ensure you have the following installed on your system:
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url> nucamp_soloai
+git clone https://github.com/nucamp/soloai_starter.git nucamp_soloai
 cd nucamp_soloai
 ```
 
