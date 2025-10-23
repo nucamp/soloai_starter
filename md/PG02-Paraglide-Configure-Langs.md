@@ -12,9 +12,9 @@ Configure multiple languages and implement a language switcher for the SvelteKit
 ### Functional Requirements
 
 #### Language Configuration
-- **Language Support**: Configure English (en) as default locale with Spanish (es) and French (fr) as additional supported languages
+- **Language Support**: Configure English (en) as default locale with fr, hi, es, pt, de, it, ur, fi, nb, ar, ru as additional supported languages
 - **Locale Detection**: Implement automatic locale detection from browser preferences with fallback to default locale
-- **URL Structure**: Support locale-aware routing with optional locale prefix (/, /es/, /fr/) without breaking existing routes
+- **URL Structure**: Support locale-aware routing with optional locale prefix (/, /es/, /fr/ etc/...) without breaking existing routes
 - **Persistence**: Store user's selected language preference in browser localStorage with session persistence
 
 #### Language Switcher Component
@@ -48,31 +48,9 @@ Configure multiple languages and implement a language switcher for the SvelteKit
 
 ### Data Requirements
 
-#### Translation Message Structure
-```json
-{
-  "nav": {
-    "home": "Home",
-    "features": "Features", 
-    "pricing": "Pricing",
-    "contact": "Contact"
-  },
-  "auth": {
-    "login": "Sign In",
-    "signup": "Sign Up",
-    "logout": "Sign Out"
-  },
-  "common": {
-    "loading": "Loading...",
-    "error": "An error occurred",
-    "retry": "Try Again"
-  }
-}
-```
-
 #### Locale Metadata
 - Language codes following ISO 639-1 standard
-- Display names in native language (English, Español, Français)  
+- Display names in native language (English, Español, Français etc...)  
 - Optional country codes for regional variants
 - RTL/LTR text direction indicators
 
