@@ -1,7 +1,7 @@
 # AI02-Content-Localization-Workflow.md
 
 ## Overview
-Establish automated webhook-driven content translation workflow that automatically translates all new and updated Strapi CMS content using OpenAI API. When content creators publish or update Landing Pages, Features, or FAQ entries in Strapi, the system automatically generates Spanish and French translations and updates the Strapi i18n entries, eliminating manual translation work.
+Establish automated webhook-driven content translation workflow that automatically translates all new and updated Strapi CMS content using OpenAI API. When content creators publish or update Landing Pages, Features, or FAQ entries in Strapi, the system automatically generates all configured translations and updates the Strapi i18n entries, eliminating manual translation work.
 
 **Business Value**: Enables instant multilingual content delivery, reduces translation costs by 90%, and ensures all marketing content is immediately available in supported languages for global user acquisition.
 
@@ -26,7 +26,7 @@ Establish automated webhook-driven content translation workflow that automatical
 - **Acceptance Criteria**: Successfully translates all text fields while maintaining formatting and structure
 
 **FR-03: Strapi i18n Integration**
-- Automatically create Spanish (es) and French (fr) locale versions of translated content
+- Automatically create all configured locale versions of translated content
 - Update existing locale entries if translations already exist using Strapi REST API
 - Maintain relationships between original and translated content entries
 - Set appropriate publication status for translated entries based on source content
@@ -147,13 +147,13 @@ Establish automated webhook-driven content translation workflow that automatical
 - SP04-Strapi-API-Permissions.md: API permissions configured for content access
 - AI01-OpenAI-API-Setup.md: OpenAI API integration with translation capabilities
 - PG01-Paraglide-Install.md: Paraglide i18n framework installed
-- PG02-Paraglide-Configure-Langs.md: Spanish and French locales configured
+- PG02-Paraglide-Configure-Langs.md: All configured locales (Spanish, French, etc.) configured
 
 ## Acceptance Criteria
 - [ ] Strapi webhooks configured and firing on content publish/update events
 - [ ] Webhook endpoint processes requests and validates signatures correctly
 - [ ] OpenAI API successfully translates content while preserving formatting
-- [ ] Translated content automatically appears in Strapi admin under Spanish/French locale tabs
+- [ ] Translated content automatically appears in Strapi admin under all locale tabs
 - [ ] Translation jobs queued and processed without blocking other operations
 - [ ] Comprehensive error handling with retry logic for failed translations
 - [ ] All translation activities logged with detailed audit information
