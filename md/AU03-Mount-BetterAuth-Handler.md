@@ -91,10 +91,43 @@
 This implementation creates the critical server-side authentication infrastructure using Better Auth's SvelteKit integration:
 
 ### Server Hook Integration
-The authentication handler should be mounted in SvelteKit's server hook (`src/hooks.server.ts`) using the `svelteKitHandler` function. This handler:
-- Does NOT automatically populate session data in `event.locals`
-- Requires manual session fetching to make session available throughout the application
-- Should populate `event.locals.session` and `event.locals.user` for use in layouts, actions, and endpoints
+
+The authentication handler should be integrated into SvelteKit's server hook (`src/hooks.server.ts`) as part of the middleware sequence:
+
+**Solo AI Reference Implementation Pattern**:
+```typescript
+// In hooks.server.ts
+import { sequence } from '@sveltejs/kit/hooks';
+import { auth } from './auth';
+
+// Create a betterAuthHandle middleware function
+const betterAuthHandle = async ({ event, resolve }) => {
+  // For auth routes, the API handler manages everything
+  // For other routes, fetch and populate session data
+  const session = await auth.api.getSession({ headers: event.request.headers });
+
+  if (session) {
+    event.locals.session = session.session;
+    event.locals.user = session.user;
+  }
+
+  return resolve(event);
+};
+
+// Compose with other middleware
+export const handle = sequence(
+  // Other middleware...
+  betterAuthHandle,
+  // More middleware...
+);
+```
+
+**Key Points**:
+- The handler does NOT automatically populate session data in `event.locals`
+- You must manually fetch session using `auth.api.getSession()` with request headers
+- Populate `event.locals.session` and `event.locals.user` for use throughout the app
+- Session data becomes available in layouts, actions, and endpoints via `event.locals`
+- Use SvelteKit's `sequence()` to compose with other middleware handlers
 
 ### Cookie Plugin for Server Actions
 For server actions that set authentication cookies (e.g., `signInEmail`, `signUpEmail`), configure the `sveltekitCookies` plugin in your Better Auth initialization:
@@ -102,8 +135,29 @@ For server actions that set authentication cookies (e.g., `signInEmail`, `signUp
 - Ensures cookies are properly set during server-side authentication operations
 - Required for email/password authentication flows to work correctly
 
-### API Route Handler
-The handler must also be mounted as a SvelteKit API route at `src/routes/api/auth/[...all]/+server.ts` using the `[...all]` catch-all pattern to capture all authentication-related requests.
+### API Route Handler Implementation
+
+**File**: `src/routes/api/auth/[...all]/+server.ts`
+
+```typescript
+import { auth } from "../../../../auth";
+import type { RequestHandler } from "./$types";
+
+export const GET: RequestHandler = async (event) => {
+  return auth.handler(event.request);
+};
+
+export const POST: RequestHandler = async (event) => {
+  return auth.handler(event.request);
+};
+```
+
+**Implementation Notes**:
+- The handler must be mounted at `src/routes/api/auth/[...all]/+server.ts` using the `[...all]` catch-all pattern
+- Both GET and POST request handlers delegate to `auth.handler(event.request)`
+- The auth instance is imported from your `src/auth.ts` configuration file
+- Better Auth automatically handles all authentication endpoints through this single handler
+- Supports endpoints like `/api/auth/sign-in`, `/api/auth/sign-up`, `/api/auth/session`, `/api/auth/callback/*`, etc.
 
 This implementation will be consumed by:
 1. **Client Setup** (AU04-Global-Client-Setup.md): Frontend client will connect to these mounted endpoints

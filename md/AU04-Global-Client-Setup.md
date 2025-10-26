@@ -56,11 +56,12 @@ Set up Better Auth client-side configuration with createAuthClient and integrate
 - Mounted Better Auth handler from AU03-Mount-BetterAuth-Handler.md
 
 ### Integration Architecture
-- Create auth client using `createAuthClient` from `better-auth/svelte` package
+- Create auth client in `src/lib/auth/client.ts` using `createAuthClient` from `better-auth/svelte`
 - Client automatically connects to Better Auth server endpoints at `/api/auth/*` routes
 - **Nano-store Integration**: Client uses nano-store for reactive state management
 - State automatically reflects changes when users sign in, sign out, or session updates occur
 - No manual context setup required - client provides reactive stores out of the box
+- **Plugin Support**: Use `inferAdditionalFields` plugin for type-safe access to custom user fields
 
 ### Client Configuration
 - Configure base URL pointing to mounted Better Auth handler (typically handled automatically)
@@ -76,9 +77,10 @@ Set up Better Auth client-side configuration with createAuthClient and integrate
 - No manual state management or context setup required
 
 ### Environment Variables
-- Use existing `BETTER_AUTH_URL` from server configuration
-- Support `PUBLIC_BETTER_AUTH_URL` for client-side API calls
-- No additional environment variables required
+- **Required**: `PUBLIC_BASE_URL` - Base URL for authentication API endpoints
+- The client uses this to construct full URLs for auth requests (e.g., `${PUBLIC_BASE_URL}/api/auth/sign-in`)
+- Must be a public environment variable (prefix with `PUBLIC_`) to be accessible in client code
+- Example: `PUBLIC_BASE_URL=http://localhost:5173` (development) or `PUBLIC_BASE_URL=https://yourdomain.com` (production)
 
 ## Additional Context for AI Assistant
 
@@ -92,16 +94,43 @@ The `better-auth/svelte` package provides a specialized SvelteKit client using `
 - **Sign-out**: Provides methods for signing out users with automatic state cleanup
 - **Type Safety**: Full TypeScript support for authentication operations
 
-### Implementation Pattern
+### Implementation Pattern from Solo AI Reference Project
+
+**File**: `src/lib/auth/client.ts`
+
 ```typescript
+import { PUBLIC_BASE_URL } from "$env/static/public";
 import { createAuthClient } from "better-auth/svelte";
+import { inferAdditionalFields } from "better-auth/client/plugins";
+import type { auth } from "../../auth";
 
 export const authClient = createAuthClient({
-  // Configuration automatically connects to /api/auth endpoints
+  baseURL: PUBLIC_BASE_URL,
+  plugins: [
+    inferAdditionalFields<typeof auth>()
+  ]
 });
+```
 
-// Client provides reactive stores that components can subscribe to
-// Changes automatically propagate when users sign in/out
+**Key Implementation Points**:
+- **Base URL**: Configure `baseURL` with `PUBLIC_BASE_URL` environment variable
+- **Type Safety**: Use `inferAdditionalFields` plugin with `typeof auth` to infer custom user fields
+- **Additional Fields**: This plugin ensures TypeScript knows about custom fields like `locale` and `timezone`
+- **Reactive Stores**: Client automatically provides reactive stores via nano-store integration
+- **No Manual Setup**: Components can directly import and use `authClient` without context setup
+
+**Usage in Components**:
+```typescript
+import { authClient } from "$lib/auth/client";
+
+// Access reactive session store
+$: session = authClient.session;
+
+// Sign in
+await authClient.signIn.email({ email, password });
+
+// Sign out
+await authClient.signOut();
 ```
 
 The implementation will be consumed by:

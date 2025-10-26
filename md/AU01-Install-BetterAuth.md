@@ -55,17 +55,23 @@ Install Better Auth server and client packages for comprehensive authentication 
 
 ### Environment Variables
 Add to existing `.env` configuration established in EV01-Env-File-Setup.md:
+
+**Server-Side Variables** (Private):
 - `BETTER_AUTH_SECRET`: Cryptographically secure secret for JWT signing and session encryption
-- `BETTER_AUTH_URL`: Base URL for authentication callbacks and redirects
+- `GOOGLE_ID` (or `GOOGLE_CLIENT_ID`): OAuth client ID for Google social authentication
+- `GOOGLE_SECRET` (or `GOOGLE_CLIENT_SECRET`): OAuth client secret for Google social authentication
+- `GITHUB_CLIENT_ID`: OAuth client ID for GitHub social authentication
+- `GITHUB_CLIENT_SECRET`: OAuth client secret for GitHub social authentication
 - `EMAIL_FROM`: Sender email address for password reset and verification emails
 - `EMAIL_SERVER_HOST`: SMTP server hostname for email delivery
 - `EMAIL_SERVER_PORT`: SMTP server port (typically 587 or 465)
 - `EMAIL_SERVER_USER`: SMTP authentication username
 - `EMAIL_SERVER_PASSWORD`: SMTP authentication password or app-specific password
-- `GOOGLE_CLIENT_ID`: OAuth client ID for Google social authentication
-- `GOOGLE_CLIENT_SECRET`: OAuth client secret for Google social authentication
-- `GITHUB_CLIENT_ID`: OAuth client ID for GitHub social authentication
-- `GITHUB_CLIENT_SECRET`: OAuth client secret for GitHub social authentication
+
+**Client-Side Variables** (Public):
+- `PUBLIC_BASE_URL`: Base URL for authentication API endpoints and OAuth callbacks
+  - Used by both server (`baseURL` in auth config) and client (auth client `baseURL`)
+  - Example: `http://localhost:5173` (dev) or `https://yourdomain.com` (prod)
 
 ### Integration Points
 - Extend existing environment variable validation from EV02-Env-Validation.md to include authentication secrets
@@ -98,13 +104,20 @@ This installation prepares for:
 - AU04-Global-Client-Setup.md: Client-side authentication state management
 
 ### Development Workflow
-1. Install Better Auth packages using package manager
-2. Generate secure authentication secrets using crypto utilities
-3. Update environment configuration files with authentication variables
-4. Update environment validation schema to include authentication secrets
-5. Verify package installation and environment configuration
-6. Test basic package imports and configuration loading
-7. Prepare project structure for authentication implementation
+1. Install Better Auth packages: `npm install better-auth @better-auth/cli`
+2. Install Prisma dependencies if not already installed (see DB02-Prisma-Setup.md)
+3. Generate secure authentication secrets using crypto utilities
+4. Update environment configuration files with authentication variables:
+   - Add `PUBLIC_BASE_URL` for both server and client usage
+   - Add OAuth credentials (`GOOGLE_ID`, `GOOGLE_SECRET`, etc.)
+   - Add `BETTER_AUTH_SECRET` for JWT signing
+5. Update environment validation schema to include authentication secrets
+6. Verify package installation and environment configuration
+7. Test basic package imports and configuration loading
+8. Prepare project structure for authentication implementation:
+   - Create `src/auth.ts` for server configuration
+   - Create `src/lib/auth/client.ts` for client configuration
+   - Create `src/routes/api/auth/[...all]/+server.ts` for API handler
 
 ### Security Notes
 - Never commit actual secret values to version control

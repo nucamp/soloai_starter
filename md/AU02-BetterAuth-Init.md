@@ -55,13 +55,16 @@
 - Account table for OAuth provider connections
 - Verification token table for email verification and password reset
 
-### Environment Variables
-- BETTER_AUTH_SECRET (32+ character cryptographically secure string)
-- BETTER_AUTH_URL (base URL for authentication callbacks)
-- EMAIL_FROM, EMAIL_SERVER_HOST, EMAIL_SERVER_PORT, EMAIL_SERVER_USER, EMAIL_SERVER_PASSWORD
-- GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (OAuth credentials)
-- GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET (OAuth credentials)
-- DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET (OAuth credentials)
+### Environment Variables Required
+
+**Server-Side (Private)**:
+- `BETTER_AUTH_SECRET` - 32+ character cryptographically secure string for JWT signing
+- `GOOGLE_ID`, `GOOGLE_SECRET` - Google OAuth credentials
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` - GitHub OAuth credentials
+- `EMAIL_FROM`, `EMAIL_SERVER_HOST`, `EMAIL_SERVER_PORT`, `EMAIL_SERVER_USER`, `EMAIL_SERVER_PASSWORD` - Email service config
+
+**Client-Side (Public)**:
+- `PUBLIC_BASE_URL` - Base URL for authentication callbacks and API endpoints (e.g., `http://localhost:5173` or `https://yourdomain.com`)
 
 ### Configuration Requirements
 - Create `src/lib/auth.ts` or `src/auth.ts` file with Better Auth initialization
@@ -77,21 +80,86 @@
 - Configure password requirements (minimum length, complexity)
 - Set up proper error handling and logging for authentication events
 
-### Basic Configuration Example
+### Configuration Example from Solo AI Reference Project
+
+**File**: `src/auth.ts`
+
 ```typescript
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { sveltekitCookies } from "better-auth/svelte-kit";
 import { PrismaClient } from "@prisma/client";
+import { GOOGLE_ID, GOOGLE_SECRET } from "$env/static/private";
+import { PUBLIC_BASE_URL } from "$env/static/public";
+import { getRequestEvent } from "$app/server";
 
 const prisma = new PrismaClient();
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: "mysql", // Must match your database type
+    provider: "mysql" // Must match your database type
   }),
-  // Additional configuration for email, OAuth providers, etc.
+  baseURL: PUBLIC_BASE_URL,
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false
+  },
+  socialProviders: {
+    google: {
+      clientId: GOOGLE_ID as string,
+      clientSecret: GOOGLE_SECRET as string,
+    },
+  },
+  user: {
+    additionalFields: {
+      locale: {
+        type: "string",
+        required: false,
+        defaultValue: "en",
+      },
+      timezone: {
+        type: "string",
+        required: false,
+        defaultValue: "UTC",
+      }
+    }
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user, ctx) => {
+          // Get locale from Paraglide if not set
+          const event = getRequestEvent();
+          if (!user.locale && event) {
+            const paraglideCookieLocale = event.cookies.get('PARAGLIDE_LOCALE');
+            const paraglideEventLocale = event.locals?.paraglide?.locale;
+            user.locale = paraglideEventLocale || paraglideCookieLocale || "en";
+          }
+          if (!user.timezone && event) {
+            const preferredTimezone = event.cookies.get('preferredTimezone');
+            user.timezone = preferredTimezone || "UTC";
+          }
+          return { data: user };
+        }
+      }
+    }
+  },
+  plugins: [
+    // sveltekitCookies plugin ensures proper cookie handling in server actions
+    // This should be the last plugin as per Better Auth docs
+    sveltekitCookies(getRequestEvent)
+  ]
 });
 ```
+
+**Key Configuration Points**:
+- **Prisma Adapter**: Uses `prismaAdapter(prisma, { provider: "mysql" })` for MySQL database
+- **Base URL**: Set via `PUBLIC_BASE_URL` environment variable for OAuth callbacks
+- **Authentication Methods**: Email/password enabled with optional email verification
+- **Social Providers**: Google OAuth configured (add more providers as needed)
+- **Custom User Fields**: Adds `locale` and `timezone` for internationalization support
+- **Database Hooks**: Pre-populates user locale and timezone from cookies on registration
+- **Plugins**: `sveltekitCookies` plugin ensures cookies work in server actions (place last)
 
 **Note**: If using a custom Prisma output directory in your `schema.prisma` file, import PrismaClient from that custom location instead of `@prisma/client`.
 
