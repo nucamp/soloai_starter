@@ -37,9 +37,9 @@ Install Better Auth server and client packages for comprehensive authentication 
 
 ### Dependencies
 - Better Auth server package (`better-auth`) for authentication logic and database integration
-- Better Auth client package (`better-auth/client`) for frontend authentication state management
-- Better Auth SvelteKit adapter (`better-auth/svelte`) for framework-specific integration
+- Better Auth SvelteKit integration (`better-auth/svelte`) for framework-specific client and server utilities
 - **Prisma ORM** (`@prisma/client` and `prisma`) as database adapter - see DB02-Prisma-Setup.md
+- **Better Auth CLI** (`@better-auth/cli`) for schema generation and database migrations
 - Email provider integration packages (nodemailer, resend, or similar)
 - OAuth provider SDKs for social authentication (google, github, discord)
 - Crypto utilities for secure secret generation and validation
@@ -47,9 +47,11 @@ Install Better Auth server and client packages for comprehensive authentication 
 ### Database Integration
 - Connect to `soloai_db` database via Prisma ORM (configured in DB02-Prisma-Setup.md)
 - Use DATABASE_URL from established environment configuration
-- Prepare for user authentication tables creation in subsequent initialization step
+- Better Auth uses `prismaAdapter` to integrate with Prisma Client for type-safe database operations
+- Authentication schema generated via Better Auth CLI: `npx @better-auth/cli@latest generate`
+- **Important**: If using custom Prisma output directory (e.g., `output = "../src/generated/prisma"`), import PrismaClient from that location instead of `@prisma/client`
 - Prisma handles connection pooling and transaction management for authentication operations
-- Better Auth uses Prisma Client for type-safe database operations
+- Prisma schema generation supported; manual migration may be required for MySQL
 
 ### Environment Variables
 Add to existing `.env` configuration established in EV01-Env-File-Setup.md:
@@ -74,8 +76,8 @@ Add to existing `.env` configuration established in EV01-Env-File-Setup.md:
 ### File Structure
 Update existing project structure to include:
 - Authentication configuration in `src/lib/auth/` directory
-- Client-side authentication utilities in `src/lib/auth/client.ts`
-- Server-side authentication configuration in `src/lib/auth/server.ts`
+- Server-side authentication configuration in `src/lib/auth.ts` or `src/auth.ts`
+- SvelteKit-specific client utilities from `better-auth/svelte` package
 - Type definitions for authentication state and user objects
 - Environment variable validation updates in existing validation system
 

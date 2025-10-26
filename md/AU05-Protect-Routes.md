@@ -46,15 +46,17 @@ Implement comprehensive route protection system for authenticated areas of the S
 ### Implementation Components
 1. **Server-Side Route Guards**:
    - Create `+layout.server.ts` files for protected route groups
+   - Use session data from `event.locals.session` and `event.locals.user` (populated by server hook)
    - Implement session validation using Better Auth server methods
    - Return proper redirect responses for unauthenticated requests
    - Handle session data serialization for client hydration
 
 2. **Client-Side Route Guards**:
    - Create `+layout.ts` files with authentication checks
-   - Implement reactive session monitoring using Better Auth client
+   - Use reactive stores from Better Auth Svelte client (nano-store based)
+   - Implement reactive session monitoring that automatically updates on state changes
    - Handle client-side redirects and loading states
-   - Maintain authentication state consistency
+   - Maintain authentication state consistency across client and server
 
 3. **Route Organization**:
    - Group protected routes under common parent directories

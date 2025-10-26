@@ -37,9 +37,10 @@
 
 ### Session Management Architecture
 - **Client-Side Storage**: Utilize Better Auth's built-in session management with secure cookie handling
-- **Reactive Stores**: Create Svelte stores for session state that update automatically
-- **Event Listeners**: Listen for Better Auth session events and storage changes
-- **Tab Communication**: Use BroadcastChannel API or storage events for cross-tab synchronization
+- **Reactive Stores**: Better Auth Svelte client provides nano-store based reactive stores automatically
+- **Automatic Updates**: Stores automatically update on authentication events without manual listeners
+- **Event Listeners**: Better Auth handles session events and storage changes internally
+- **Tab Communication**: Better Auth manages cross-tab synchronization automatically
 
 ### Performance Requirements
 - Session initialization must complete within 100ms on application start
@@ -77,9 +78,10 @@
 ## Implementation Requirements
 
 ### Session Store Management
-- Create reactive Svelte stores for user session, authentication status, and loading states
-- Implement automatic subscription to Better Auth session changes
-- Handle session state persistence across page navigation and reloads
+- Better Auth Svelte client provides reactive stores via nano-store integration
+- Stores automatically update when authentication state changes (sign-in, sign-out, session updates)
+- **Automatic Reactivity**: No manual store creation needed - client exposes reactive stores out of the box
+- Session state automatically persists across page navigation and reloads
 - Provide typed interfaces for session data access throughout the application
 
 ### Cross-Tab Communication

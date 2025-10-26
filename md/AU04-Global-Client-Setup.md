@@ -49,28 +49,31 @@ Set up Better Auth client-side configuration with createAuthClient and integrate
 ## Technical Specifications
 
 ### Dependencies
-- `better-auth/client` - Client-side authentication library
-- `better-auth/svelte` - SvelteKit-specific authentication adapter
+- `better-auth/svelte` - SvelteKit-specific authentication client with reactive state management
+- Includes `createAuthClient` function for client initialization
+- Built-in nano-store integration for reactive authentication state
 - Existing Better Auth server configuration from AU02-BetterAuth-Init.md
 - Mounted Better Auth handler from AU03-Mount-BetterAuth-Handler.md
 
 ### Integration Architecture
-- Create `src/lib/auth-client.ts` for Better Auth client configuration
-- Integrate with SvelteKit's `+layout.svelte` for global context provision
-- Use SvelteKit's context API (`setContext`/`getContext`) for state sharing
-- Connect to Better Auth server endpoints at `/api/auth/*` routes
+- Create auth client using `createAuthClient` from `better-auth/svelte` package
+- Client automatically connects to Better Auth server endpoints at `/api/auth/*` routes
+- **Nano-store Integration**: Client uses nano-store for reactive state management
+- State automatically reflects changes when users sign in, sign out, or session updates occur
+- No manual context setup required - client provides reactive stores out of the box
 
 ### Client Configuration
-- Configure base URL pointing to mounted Better Auth handler
-- Set up automatic session refresh and token management  
-- Enable reactive state updates for authentication changes
-- Configure OAuth provider support matching server configuration
+- Configure base URL pointing to mounted Better Auth handler (typically handled automatically)
+- Client provides reactive state through nano-store
+- Automatic session refresh and token management handled by Better Auth
+- OAuth provider support automatically matches server configuration
 
-### Context Integration
-- Provide authentication context through SvelteKit's context system
-- Export authentication utilities and state accessors
-- Create typed context interface for TypeScript support
-- Enable component-level authentication state subscription
+### Reactive State Management
+- Authentication client exposes reactive stores for session data
+- Changes automatically propagate to all components using the stores
+- Supports social authentication providers (e.g., GitHub, Google, Discord)
+- Sign-in/sign-out actions automatically update reactive state
+- No manual state management or context setup required
 
 ### Environment Variables
 - Use existing `BETTER_AUTH_URL` from server configuration
@@ -81,13 +84,31 @@ Set up Better Auth client-side configuration with createAuthClient and integrate
 
 This feature builds directly on the Better Auth server setup from AU02-BetterAuth-Init.md and mounted handler from AU03-Mount-BetterAuth-Handler.md. The client must connect to the existing `/api/auth/[...all]` endpoint structure.
 
-The implementation should establish the global authentication context that will be consumed by:
+### Better Auth Svelte Client
+The `better-auth/svelte` package provides a specialized SvelteKit client using `createAuthClient`:
+- **Automatic Reactivity**: Built-in nano-store integration provides reactive authentication state
+- **State Updates**: Session changes automatically trigger component re-renders
+- **Social Auth**: Supports social authentication providers configured on the server
+- **Sign-out**: Provides methods for signing out users with automatic state cleanup
+- **Type Safety**: Full TypeScript support for authentication operations
+
+### Implementation Pattern
+```typescript
+import { createAuthClient } from "better-auth/svelte";
+
+export const authClient = createAuthClient({
+  // Configuration automatically connects to /api/auth endpoints
+});
+
+// Client provides reactive stores that components can subscribe to
+// Changes automatically propagate when users sign in/out
+```
+
+The implementation will be consumed by:
 - Login forms (L02-Login-Form.md)
-- Signup forms (S02-Signup-Form.md) 
+- Signup forms (S02-Signup-Form.md)
 - Route guards (AU05-Protect-Routes.md)
 - Session persistence (AU06-Session-Persistence.md)
 - Account management pages (D01-Account-Route.md)
 
-Create reusable authentication utilities that can be imported throughout the application without coupling components directly to Better Auth implementation details.
-
-The client setup must support the social OAuth providers (Google, GitHub, Discord) configured in the server initialization while maintaining security best practices for client-side authentication state management.
+The reactive stores provided by the client eliminate the need for manual context setup or state management. Components can directly subscribe to authentication state and automatically receive updates.

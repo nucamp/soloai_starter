@@ -42,7 +42,8 @@
 ### Dependencies
 - better-auth (server package) - installed in AU01-Install-BetterAuth.md
 - **Prisma ORM** (@prisma/client and prisma) - configured in DB02-Prisma-Setup.md
-- Prisma adapter for Better Auth (better-auth uses Prisma Client directly)
+- **Prisma adapter** from `better-auth/adapters/prisma` - connects Better Auth to Prisma ORM
+- **Better Auth CLI** (@better-auth/cli) - for schema generation and migrations
 - Email provider SDK (nodemailer, resend, or similar)
 - OAuth provider SDKs for social authentication
 - Crypto utilities for secure token generation
@@ -64,19 +65,39 @@
 
 ### Configuration Requirements
 - Create `src/lib/auth.ts` or `src/auth.ts` file with Better Auth initialization
-- Configure Prisma adapter using Prisma Client from DB02-Prisma-Setup.md
-- Import DATABASE_URL from environment for Prisma connection
+- Configure Prisma adapter using `prismaAdapter(prisma, { provider: "mysql" })` syntax
+- Import PrismaClient instance from DB02-Prisma-Setup.md configuration
+- **Important**: Specify correct database provider in adapter config (e.g., "mysql", "postgresql", "sqlite")
+- **Schema Generation**: Run `npx @better-auth/cli@latest generate` to create auth tables in Prisma schema
+- **Migration**: After schema generation, run `npx prisma migrate dev` to apply database changes
 - Set up email provider configuration for verification and password reset emails
 - Configure OAuth providers with proper redirect URLs and scopes
 - Implement session management with appropriate expiration and refresh handling
 - Enable email verification requirement for new user accounts
 - Configure password requirements (minimum length, complexity)
 - Set up proper error handling and logging for authentication events
-- Run `npx prisma generate` after Better Auth adds auth tables to schema
+
+### Basic Configuration Example
+```typescript
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, {
+    provider: "mysql", // Must match your database type
+  }),
+  // Additional configuration for email, OAuth providers, etc.
+});
+```
+
+**Note**: If using a custom Prisma output directory in your `schema.prisma` file, import PrismaClient from that custom location instead of `@prisma/client`.
 
 ### Integration Points
 - Database connection via Prisma to `soloai_db` in MySQL container (DB02-Prisma-Setup.md)
-- Better Auth auto-generates Prisma models for auth tables
+- Better Auth auto-generates Prisma models for auth tables via CLI
 - Email configuration must support future Mautic integration workflow
 - User data structure must accommodate future profile management features
 - Authentication configuration must support future route protection implementation
