@@ -10,7 +10,8 @@
 
 ### Service Details
 - Better Auth v1.0+ server package for authentication logic
-- MySQL database adapter connecting to existing container from DB01-DB-Container-Setup.md
+- **Prisma ORM** as database adapter connecting to `soloai_db` (from DB02-Prisma-Setup.md)
+- MySQL database container from DB01-DB-Container-Setup.md
 - Email provider integration for verification and password reset flows
 - Social OAuth providers: Google, GitHub, Discord for streamlined registration
 
@@ -27,16 +28,21 @@
 - Input validation and sanitization for all authentication fields
 
 ### Database Integration
-- Connect to existing MySQL container using established database connection
-- Auto-generate authentication tables (users, sessions, accounts, verification_tokens)
-- Support user profile data storage with extensible schema
-- Handle database migrations for authentication-related tables
+- Connect to `soloai_db` database via Prisma Client (from DB02-Prisma-Setup.md)
+- Better Auth auto-generates authentication tables via Prisma schema:
+  - `user`: User accounts with id, email, name, emailVerified, image, timestamps
+  - `session`: Active user sessions with expiration handling
+  - `account`: OAuth provider connections (Google, GitHub, Discord)
+  - `verification`: Email verification and password reset tokens
+- Prisma migrations track all schema changes
+- Type-safe database access via Prisma Client for all auth operations
 
 ## Technical Specifications
 
 ### Dependencies
-- better-auth (server package)
-- Database adapter compatible with MySQL/Prisma setup
+- better-auth (server package) - installed in AU01-Install-BetterAuth.md
+- **Prisma ORM** (@prisma/client and prisma) - configured in DB02-Prisma-Setup.md
+- Prisma adapter for Better Auth (better-auth uses Prisma Client directly)
 - Email provider SDK (nodemailer, resend, or similar)
 - OAuth provider SDKs for social authentication
 - Crypto utilities for secure token generation
@@ -58,20 +64,24 @@
 
 ### Configuration Requirements
 - Create `src/lib/auth.ts` or `src/auth.ts` file with Better Auth initialization
-- Configure database adapter to use existing MySQL connection from environment
+- Configure Prisma adapter using Prisma Client from DB02-Prisma-Setup.md
+- Import DATABASE_URL from environment for Prisma connection
 - Set up email provider configuration for verification and password reset emails
 - Configure OAuth providers with proper redirect URLs and scopes
 - Implement session management with appropriate expiration and refresh handling
 - Enable email verification requirement for new user accounts
 - Configure password requirements (minimum length, complexity)
 - Set up proper error handling and logging for authentication events
+- Run `npx prisma generate` after Better Auth adds auth tables to schema
 
 ### Integration Points
-- Database connection must use existing MySQL container setup
+- Database connection via Prisma to `soloai_db` in MySQL container (DB02-Prisma-Setup.md)
+- Better Auth auto-generates Prisma models for auth tables
 - Email configuration must support future Mautic integration workflow
 - User data structure must accommodate future profile management features
 - Authentication configuration must support future route protection implementation
 - Session handling must integrate with SvelteKit's server-side rendering
+- Type-safe database queries via Prisma Client for all auth operations
 
 ### Security Considerations
 - JWT secrets must be cryptographically secure and environment-specific
@@ -83,6 +93,7 @@
 
 ## Prerequisites
 - DB01-DB-Container-Setup.md (MySQL database container)
+- **DB02-Prisma-Setup.md (Prisma ORM and soloai_db database configuration)**
 - AU01-Install-BetterAuth.md (Better Auth packages and environment variables)
 - EV01-Env-File-Setup.md (environment variable management)
 - EV02-Env-Validation.md (environment variable validation)

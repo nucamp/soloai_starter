@@ -39,16 +39,17 @@ Install Better Auth server and client packages for comprehensive authentication 
 - Better Auth server package (`better-auth`) for authentication logic and database integration
 - Better Auth client package (`better-auth/client`) for frontend authentication state management
 - Better Auth SvelteKit adapter (`better-auth/svelte`) for framework-specific integration
-- Database adapter compatible with existing MySQL setup from DB01-DB-Container-Setup.md
+- **Prisma ORM** (`@prisma/client` and `prisma`) as database adapter - see DB02-Prisma-Setup.md
 - Email provider integration packages (nodemailer, resend, or similar)
 - OAuth provider SDKs for social authentication (google, github, discord)
 - Crypto utilities for secure secret generation and validation
 
 ### Database Integration
-- Connect to existing MySQL database container using DATABASE_URL from established environment configuration
+- Connect to `soloai_db` database via Prisma ORM (configured in DB02-Prisma-Setup.md)
+- Use DATABASE_URL from established environment configuration
 - Prepare for user authentication tables creation in subsequent initialization step
-- Maintain compatibility with existing database schema and connection patterns
-- Support connection pooling and transaction management for authentication operations
+- Prisma handles connection pooling and transaction management for authentication operations
+- Better Auth uses Prisma Client for type-safe database operations
 
 ### Environment Variables
 Add to existing `.env` configuration established in EV01-Env-File-Setup.md:
@@ -83,6 +84,7 @@ Update existing project structure to include:
 ### Prerequisites
 This feature builds upon:
 - DB01-DB-Container-Setup.md: MySQL database container for user data storage
+- **DB02-Prisma-Setup.md: Prisma ORM configuration and soloai_db database setup**
 - EV01-Env-File-Setup.md: Environment variable management system
 - EV02-Env-Validation.md: Environment variable validation framework
 - EV03-Secret-Management.md: Security best practices for credential management
