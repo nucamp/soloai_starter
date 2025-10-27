@@ -142,6 +142,7 @@ model User {
 - MA01-Mautic-Container-Setup.md - Mautic container running and accessible
 - DB02-Prisma-Setup.md - Prisma ORM configured with soloai_db database
 - AU02-BetterAuth-Init.md - Better Auth configured with Prisma adapter and custom user fields
+- PG01-Paraglide-Install.md - Paraglide i18n configured for language detection
 - EV01-Env-File-Setup.md - Environment variable management system
 - EV02-Env-Validation.md - Environment variable validation framework
 
@@ -152,6 +153,7 @@ model User {
 - ✅ API credentials configured and authenticated via Basic Auth
 - ✅ Users automatically provisioned in Mautic when registering via Better Auth
 - ✅ `mauticId` persisted in user database after Mautic contact creation
+- ✅ **User locale from Paraglide synced to Mautic contact on provisioning**
 - ✅ Anonymous visitor tracking linked to authenticated user profiles
 - ✅ Webhook endpoint receives and processes Mautic contact updates
 - ✅ No duplicate contacts created during anonymous-to-authenticated transition
@@ -422,8 +424,8 @@ export interface MauticUserData {
   firstname?: string;
   lastname?: string;
   ipAddress?: string;
-  preferred_locale?: string;
-  locale?: string;
+  preferred_locale?: string; // Mautic's field for user's preferred language
+  locale?: string;            // User's current locale from Paraglide/Better Auth
   timezone?: string;
   mauticId?: number;
   last_active?: string;
@@ -439,7 +441,97 @@ export interface SimplifiedError {
 }
 ```
 
-### 4. Anonymous to Authenticated User Transition
+**Important**: Both `locale` and `preferred_locale` can be used in Mautic. The `locale` field typically represents the user's current language selection from your application (e.g., from Paraglide i18n), while `preferred_locale` can store the user's long-term language preference.
+
+### 4. Locale Synchronization with Paraglide
+
+A critical part of user provisioning is syncing the user's language preference from Paraglide (your i18n library) to Mautic. This ensures marketing emails and campaigns can be sent in the user's preferred language.
+
+**Locale Flow Architecture**:
+
+```
+1. User visits site
+   └─> Paraglide detects/sets locale (e.g., 'en', 'es', 'fr')
+       └─> Stored in PARAGLIDE_LOCALE cookie
+           └─> Available in event.locals.paraglide.locale
+
+2. User registers via Better Auth
+   └─> Better Auth databaseHooks captures locale from Paraglide
+       └─> Stored in User.locale field (database)
+           └─> Available in session.user.locale
+
+3. hooks.server.ts provisions Mautic contact
+   └─> Reads locale from session.user.locale
+       └─> Sends to Mautic contact as 'locale' and/or 'preferred_locale'
+           └─> Mautic stores user's language preference
+```
+
+**Better Auth Configuration for Locale Capture**:
+
+In your `src/auth.ts` file, Better Auth should be configured to capture locale from Paraglide:
+
+```typescript
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { getRequestEvent } from "$app/server";
+
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, { provider: "mysql" }),
+
+  user: {
+    additionalFields: {
+      locale: {
+        type: "string",
+        required: false,
+        defaultValue: "en",
+      },
+      timezone: {
+        type: "string",
+        required: false,
+        defaultValue: "UTC",
+      }
+    }
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user, ctx) => {
+          // Get locale from Paraglide if not set
+          const event = getRequestEvent();
+          if (!user.locale && event) {
+            const paraglideCookieLocale = event.cookies.get('PARAGLIDE_LOCALE');
+            const paraglideEventLocale = event.locals?.paraglide?.locale;
+            user.locale = paraglideEventLocale || paraglideCookieLocale || "en";
+          }
+          if (!user.timezone && event) {
+            const preferredTimezone = event.cookies.get('preferredTimezone');
+            user.timezone = preferredTimezone || "UTC";
+          }
+          return { data: user };
+        }
+      }
+    }
+  }
+});
+```
+
+**Key Points**:
+- ✅ Locale captured from Paraglide during user registration
+- ✅ Falls back to cookie if `event.locals.paraglide` not available
+- ✅ Defaults to "en" if no locale detected
+- ✅ Stored in User database table via Better Auth
+- ✅ Available in all future sessions as `session.user.locale`
+
+**Mautic Field Mapping**:
+
+When sending to Mautic, you can use either or both fields:
+- `locale`: Current language preference (e.g., "en", "es", "fr")
+- `preferred_locale`: Alternative field name some Mautic setups use
+
+The Solo AI Reference project uses both fields for maximum compatibility.
+
+### 5. Anonymous to Authenticated User Transition
 
 The key to avoiding duplicate contacts is handling the transition when an anonymous visitor (tracked by `mtc_id` cookie) registers or logs in. This is handled in `hooks.server.ts`.
 
@@ -472,7 +564,8 @@ const betterAuthHandle: Handle = async ({ event, resolve }) => {
         firstname: session.user.name?.split(' ')[0] || '',
         lastname: session.user.name?.split(' ').slice(1).join(' ') || '',
         ipAddress: event.getClientAddress(),
-        locale: session.user.locale || 'en',
+        locale: session.user.locale || 'en',           // From Paraglide via Better Auth
+        preferred_locale: session.user.locale || 'en', // Same value for compatibility
         timezone: session.user.timezone || 'UTC',
         mauticId: mauticIdCookie ? parseInt(mauticIdCookie) : undefined,
         last_active: new Date().toISOString(),
@@ -541,7 +634,12 @@ export const handle = sequence(
 - ✅ Handles shared device scenarios (different users, same browser)
 - ✅ Maintains marketing attribution and campaign tracking
 
-### 5. Update User Database with Mautic ID
+**Locale Syncing**:
+- ✅ User's Paraglide locale automatically synced to Mautic
+- ✅ Enables sending campaign emails in user's preferred language
+- ✅ Supports multilingual marketing automation (see AI02-Content-Localization-Workflow.md)
+
+### 6. Update User Database with Mautic ID
 
 After creating or updating the Mautic contact, you need to persist the `mauticId` in your database.
 
@@ -589,7 +687,7 @@ if (session.user && !session.user.mauticId) {
 - Sync the browser cookie with the database value
 - On subsequent requests, `session.user.mauticId` will exist, preventing re-provisioning
 
-### 6. Mautic Webhook Endpoint
+### 7. Mautic Webhook Endpoint
 
 Create a single webhook endpoint to receive all Mautic webhook events for contact updates, form submissions, and campaign interactions.
 
@@ -720,7 +818,7 @@ https://your-ngrok-url.ngrok.io/api/webhooks/mautic
 - Rate limit webhook endpoint to prevent abuse
 - Log all webhook events for debugging and monitoring
 
-### 7. Dependencies Installation
+### 8. Dependencies Installation
 
 Install required npm packages:
 
@@ -770,8 +868,9 @@ The complete Mautic integration workflow:
 2. **Cookie Sync**: Always sync `mtc_id` cookie after provisioning to maintain tracking
 3. **Email Matching**: Search by email first to handle returning users correctly
 4. **Duplicate Prevention**: The `getOrCreateMauticUser` logic prevents duplicates
-5. **Async Processing**: Consider queueing Mautic operations for better performance
-6. **Testing**: Test anonymous → authenticated flow thoroughly in development
+5. **Locale Sync**: Always send user's locale from Paraglide to enable multilingual campaigns
+6. **Async Processing**: Consider queueing Mautic operations for better performance
+7. **Testing**: Test anonymous → authenticated flow thoroughly in development
 
 ## Troubleshooting
 
@@ -789,3 +888,10 @@ The complete Mautic integration workflow:
 - **Solution**: Check webhook URL is publicly accessible
 - **Verify**: Mautic webhook configuration is correct
 - **Test**: Use ngrok for local development testing
+
+**Issue**: User locale not syncing to Mautic
+- **Solution**: Verify Better Auth `additionalFields` includes `locale` field
+- **Check**: Paraglide is setting `PARAGLIDE_LOCALE` cookie correctly
+- **Verify**: `databaseHooks.user.create.before` captures locale from Paraglide
+- **Test**: Check `session.user.locale` has correct value in hooks.server.ts
+- **Mautic**: Verify contact has `locale` or `preferred_locale` field populated
