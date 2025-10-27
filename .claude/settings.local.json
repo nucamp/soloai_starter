@@ -6,7 +6,9 @@
       "Read(//mnt/d/Business/nucamp/Courses and Program - Documents/Course Production/Solo AI Tech Entrepreneur/Production/**)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:docs.mautic.org)",
+      "WebFetch(domain:devdocs.mautic.org)"
     ],
     "deny": [],
     "ask": []
