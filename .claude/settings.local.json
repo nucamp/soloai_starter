@@ -9,7 +9,8 @@
       "WebSearch",
       "WebFetch(domain:docs.mautic.org)",
       "WebFetch(domain:devdocs.mautic.org)",
-      "WebFetch(domain:docs.stripe.com)"
+      "WebFetch(domain:docs.stripe.com)",
+      "WebFetch(domain:klaro.org)"
     ],
     "deny": [],
     "ask": []
