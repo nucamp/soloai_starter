@@ -90,6 +90,7 @@ initLemonSqueezy();
 ```typescript
 // src/lib/lemonsqueezy/checkout.ts
 import { createCheckout } from '@lemonsqueezy/lemonsqueezy.js';
+import { getStoreId, isTestMode } from './client';
 import type { User } from '$lib/types';
 
 export async function createCheckoutUrl(
@@ -99,35 +100,61 @@ export async function createCheckoutUrl(
   cancelUrl: string
 ) {
   try {
-    const checkout = await createCheckout(
-      env.LEMONSQUEEZY_STORE_ID,
-      variantId,
-      {
-        checkoutData: {
-          email: user.email,
-          name: user.name,
-          custom: {
-            user_id: user.id
-          }
-        },
-        checkoutOptions: {
-          success_url: successUrl,
-          cancel_url: cancelUrl
+    const storeId = await getStoreId(); // getStoreId is now async
+    const testMode = isTestMode(); // Use environment variable
+
+    const checkout = await createCheckout(storeId, variantId, {
+      checkoutData: {
+        email: user.email,
+        name: user.name,
+        custom: {
+          user_id: user.id,
+          success_url: successUrl, // Include in custom data
+          cancel_url: cancelUrl     // Include in custom data
         }
-      }
-    );
+      },
+      checkoutOptions: {
+        embed: false,
+        media: true,
+        logo: true,
+        desc: true,
+        discount: true,
+        dark: false,
+        subscriptionPreview: true,
+        buttonColor: '#3B82F6'
+      },
+      expiresAt: undefined,
+      preview: false,
+      testMode // Use environment variable LEMONSQUEEZY_TEST_MODE
+    });
 
     if (checkout.error) {
       throw new Error(checkout.error.message);
     }
 
-    return checkout.data?.attributes.url;
+    // Access URL from nested structure: checkout.data.data.attributes.url
+    const checkoutUrl = checkout.data?.data?.attributes?.url ||
+                        checkout.data?.attributes?.url ||
+                        checkout.data?.url;
+
+    if (!checkoutUrl) {
+      throw new Error('No checkout URL found in response');
+    }
+
+    // Return URL as-is (don't modify signed URL)
+    return checkoutUrl;
   } catch (error) {
     console.error('Failed to create checkout:', error);
     throw error;
   }
 }
 ```
+
+**Important Notes:**
+- Success/cancel URLs must be in `custom` data, NOT in `checkoutOptions`
+- The checkout URL is signed by LemonSqueezy - never modify it after receiving it
+- Modifying the URL breaks the signature and causes "Invalid signature" errors
+- Handle redirects in your webhook handler using the URLs from `meta.custom_data`
 
 ### Webhook Signature Verification
 ```typescript

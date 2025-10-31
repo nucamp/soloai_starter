@@ -68,68 +68,66 @@ interface CheckoutResponse {
 // src/routes/api/lemonsqueezy/checkout/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createCheckout } from '@lemonsqueezy/lemonsqueezy.js';
-import { env } from '$env/dynamic/private';
+import { createCheckoutUrl } from '$lib/lemonsqueezy';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
-  // Verify authentication
-  const session = await locals.auth();
-  if (!session?.user) {
-    return json({ error: 'Authentication required' }, { status: 401 });
+  // Verify authentication using Better Auth
+  const session = locals.session;
+  const user = locals.user;
+
+  if (!session || !user) {
+    console.error('[LemonSqueezy] Unauthorized checkout attempt');
+    return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { variantId, tier } = await request.json();
-
   try {
-    // Create checkout URL
-    const checkout = await createCheckout(
-      env.LEMONSQUEEZY_STORE_ID,
-      variantId,
-      {
-        checkoutData: {
-          email: session.user.email,
-          name: session.user.name,
-          custom: {
-            user_id: session.user.id,
-            tier: tier
-          }
-        },
-        checkoutOptions: {
-          embed: false, // Use hosted checkout
-          media: false, // Hide product images for cleaner checkout
-          logo: true,   // Show store logo
-          success_url: `${url.origin}/account?success=true&checkout_id={CHECKOUT_ID}`,
-          cancel_url: `${url.origin}/pricing?canceled=true`
-        },
-        productOptions: {
-          redirect_url: `${url.origin}/account`,
-          receipt_thank_you_note: "Thank you for your subscription!"
-        }
-      }
-    );
+    // Parse request body
+    const { variantId, tier } = await request.json();
 
-    if (checkout.error) {
-      console.error('Checkout creation failed:', checkout.error);
-      return json(
-        { error: 'Failed to create checkout' },
-        { status: 500 }
-      );
+    if (!variantId) {
+      return json({ error: 'Missing variantId' }, { status: 400 });
     }
 
-    return json({
-      url: checkout.data?.attributes.url,
-      checkoutId: checkout.data?.id
+    console.log(`[LemonSqueezy] Creating checkout for user ${user.email}, tier: ${tier}`);
+
+    // Create checkout URL using SDK utilities
+    const checkout = await createCheckoutUrl({
+      variantId,
+      userEmail: user.email,
+      userName: user.name || undefined,
+      userId: user.id,
+      successUrl: `${url.origin}/account?success=true`,
+      cancelUrl: `${url.origin}/pricing?canceled=true`,
+      metadata: {
+        tier: tier || 'unknown'
+      }
     });
 
+    console.log(`[LemonSqueezy] Checkout created successfully: ${checkout.checkoutId}`);
+
+    // Return URL for client-side redirect (not server-side redirect)
+    return json({
+      url: checkout.url,
+      checkoutId: checkout.checkoutId
+    });
   } catch (error) {
-    console.error('Checkout error:', error);
+    console.error('[LemonSqueezy] Checkout creation failed:', error);
     return json(
-      { error: 'Failed to create checkout session' },
+      {
+        error: error instanceof Error ? error.message : 'Failed to create checkout'
+      },
       { status: 500 }
     );
   }
 };
 ```
+
+**Important Implementation Notes:**
+- Success/cancel URLs MUST be in `custom` data (handled by `createCheckoutUrl`)
+- Never modify the checkout URL after receiving it - it's signed by LemonSqueezy
+- Modifying the URL causes "Invalid signature" errors
+- Handle post-payment redirects in your webhook handler using `meta.custom_data`
+- The checkout URL path is `checkout.data.data.attributes.url` (nested structure)
 
 ### Frontend Integration
 ```svelte
@@ -267,9 +265,9 @@ The application automatically selects the payment provider based on the user's a
 
 ```typescript
 // Choose provider based on Paraglide locale
-import { languageTag } from '$lib/paraglide/runtime';
+import { getLocale } from '$lib/paraglide/runtime';
 
-const isUSUser = languageTag() === 'en';
+const isUSUser = getLocale() === 'en';
 
 if (isUSUser) {
   // Redirect to Stripe checkout (ST03-Stripe-Checkout-Sessions.md)
@@ -286,7 +284,7 @@ if (isUSUser) {
 <!-- src/routes/pricing/+page.svelte -->
 <script lang="ts">
   import { authClient } from '$lib/auth-client';
-  import { languageTag } from '$lib/paraglide/runtime';
+  import { getLocale } from '$lib/paraglide/runtime';
 
   // Stripe price IDs for US users
   const STRIPE_PRICE_IDS = {
@@ -308,7 +306,7 @@ if (isUSUser) {
   const currentTier = $derived((currentUser as any)?.subscriptionTier || 'free');
 
   // Determine payment provider based on locale
-  const isUSUser = $derived(languageTag() === 'en');
+  const isUSUser = $derived(getLocale() === 'en');
   const paymentProvider = $derived(isUSUser ? 'Stripe' : 'LemonSqueezy');
 
   async function handleCheckout(tier: string) {
@@ -388,7 +386,7 @@ if (isUSUser) {
 ```
 
 **Key Implementation Points:**
-1. **Locale Detection**: Uses `languageTag()` from Paraglide to determine user locale
+1. **Locale Detection**: Uses `getLocale()` from Paraglide to determine user locale
 2. **Provider Selection**: `en` locale → Stripe; all others → LemonSqueezy
 3. **Unified UX**: Same button/flow for users, different backend based on locale
 4. **Transparent Routing**: Users don't need to choose provider manually
