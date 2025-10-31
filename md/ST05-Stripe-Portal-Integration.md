@@ -99,10 +99,10 @@ Connect the existing pricing page and account dashboard UI components to Stripe 
 ## Technical Specifications
 
 ### Dependencies
-- **Required NPM Packages**: 
+- **Required NPM Packages**:
   - `stripe` (Node.js SDK) - already installed from ST02-Install-Stripe-SDK.md
-- **External Services**: 
-  - Stripe API v2025-06-30.basil+ with existing API keys from ST01-Stripe-Account-Setup.md
+- **External Services**:
+  - Stripe API (latest stable version) with existing API keys from ST01-Stripe-Account-Setup.md
   - Stripe Checkout (hosted pages)
   - Stripe Customer Portal
 - **Existing Code Dependencies**:
@@ -199,3 +199,467 @@ Connect the existing pricing page and account dashboard UI components to Stripe 
 - LemonSqueezy integration (LS01-LS05) requiring similar UI patterns
 - Advanced billing features and subscription analytics
 - Multi-currency and tax calculation displays
+
+## Implementation Details
+
+### API Endpoint: Customer Portal Session
+
+**CRITICAL:** Like checkout sessions, Customer Portal must return JSON and perform client-side redirect.
+
+```typescript
+// src/routes/api/stripe/customer-portal/+server.ts
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import stripe from '$lib/stripe/server';
+
+export const POST: RequestHandler = async ({ locals, url }) => {
+  // Verify authentication
+  const session = locals.session;
+  const user = locals.user;
+
+  if (!session || !user) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    // Check if user has a Stripe customer ID
+    const stripeCustomerId = (user as any).stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      return json(
+        { error: 'No Stripe customer ID found. Please subscribe to a plan first.' },
+        { status: 400 }
+      );
+    }
+
+    // Create Customer Portal session
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${url.origin}/account`
+    });
+
+    console.log(`Created portal session for customer ${stripeCustomerId}`);
+
+    // ✅ CORRECT: Return URL for client-side redirect
+    return json({ url: portalSession.url });
+
+    // ❌ WRONG: Server-side redirect doesn't work with fetch()
+    // return redirect(303, portalSession.url);
+
+  } catch (error) {
+    console.error('Customer portal session creation failed:', error);
+
+    const errorMessage = error instanceof Error ? error.message : 'Portal session creation failed';
+    return json({ error: errorMessage }, { status: 500 });
+  }
+};
+```
+
+### API Endpoint: Subscription Data Fetch (Optional)
+
+This endpoint is optional - you can also use Better Auth session data directly if `customSession` plugin is configured.
+
+```typescript
+// src/routes/api/stripe/subscription/+server.ts
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import stripe from '$lib/stripe/server';
+
+export const GET: RequestHandler = async ({ locals }) => {
+  // Verify authentication
+  const session = locals.session;
+  const user = locals.user;
+
+  if (!session || !user) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    // Get subscription data from user object (populated by Better Auth customSession)
+    const subscriptionData = {
+      stripeCustomerId: (user as any).stripeCustomerId || null,
+      subscriptionStatus: (user as any).subscriptionStatus || 'free',
+      subscriptionTier: (user as any).subscriptionTier || 'free',
+      subscriptionId: (user as any).subscriptionId || null,
+      subscriptionEndDate: (user as any).subscriptionEndDate || null
+    };
+
+    // If user has an active subscription, fetch additional details from Stripe
+    if (subscriptionData.subscriptionId) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionData.subscriptionId);
+
+        // Add additional Stripe data
+        return json({
+          ...subscriptionData,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          currentPeriodStart: subscription.current_period_start
+            ? new Date(subscription.current_period_start * 1000)
+            : null,
+          currentPeriodEnd: subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000)
+            : null
+        });
+      } catch (stripeError) {
+        console.error('Error fetching subscription details:', stripeError);
+        // Fall through to return database data only
+      }
+    }
+
+    // Return subscription data from database
+    return json(subscriptionData);
+  } catch (error) {
+    console.error('Subscription data fetch failed:', error);
+
+    const errorMessage = error instanceof Error ? error.message : 'Subscription fetch failed';
+    return json({ error: errorMessage }, { status: 500 });
+  }
+};
+```
+
+### Account Page Integration
+
+Update account page to display subscription info and manage subscription button:
+
+```svelte
+<!-- src/routes/account/+page.svelte -->
+<script lang="ts">
+  import { authClient } from '$lib/auth-client';
+  import { page } from '$app/stores';
+
+  let sessionData = authClient.useSession();
+
+  // Derive user data from session (includes custom Stripe fields via customSession plugin)
+  const currentUser = $derived($sessionData?.data?.user);
+
+  // Check for success parameter from Stripe redirect
+  const showSuccessMessage = $derived($page.url.searchParams.get('success') === 'true');
+  const sessionId = $derived($page.url.searchParams.get('session_id'));
+
+  // Handle manage subscription
+  let isLoadingPortal = false;
+  async function handleManageSubscription() {
+    if (isLoadingPortal) return; // Prevent double-clicks
+
+    isLoadingPortal = true;
+    try {
+      // Call API to create customer portal session
+      const response = await fetch('/api/stripe/customer-portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create portal session');
+      }
+
+      // ✅ CRITICAL: Client-side redirect to Stripe Customer Portal
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No portal URL returned');
+      }
+    } catch (error) {
+      console.error('Portal error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to open subscription portal. Please try again.');
+      isLoadingPortal = false; // Only reset on error
+    }
+    // Don't reset isLoadingPortal on success - page will navigate away
+  }
+
+  // Format date helper
+  function formatDate(date: Date | string | undefined) {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }
+</script>
+
+<svelte:head>
+  <title>Account - My Dashboard</title>
+</svelte:head>
+
+<section class="container mx-auto px-4 py-8">
+  <h1 class="text-3xl font-bold mb-6">Account Overview</h1>
+
+  <!-- Success message after Stripe checkout -->
+  {#if showSuccessMessage}
+    <div class="alert alert-success mb-6">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold">Payment Successful!</h3>
+        <div class="text-sm">
+          Thank you for subscribing. Your payment has been processed successfully.
+          {#if sessionId}
+            <br />
+            <span class="opacity-70">Session ID: {sessionId}</span>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if currentUser}
+    <div class="space-y-6">
+      <!-- User Info -->
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Profile Information</h2>
+          <p><strong>Name:</strong> {currentUser.name || 'Not set'}</p>
+          <p><strong>Email:</strong> {currentUser.email}</p>
+          <p><strong>Member Since:</strong> {formatDate(currentUser.createdAt)}</p>
+        </div>
+      </div>
+
+      <!-- Subscription Status -->
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Subscription Status</h2>
+
+          {#if (currentUser as any).subscriptionStatus && (currentUser as any).subscriptionStatus !== 'free'}
+            <div class="space-y-3">
+              <div>
+                <span
+                  class="badge"
+                  class:badge-success={(currentUser as any).subscriptionStatus === 'active'}
+                  class:badge-warning={(currentUser as any).subscriptionStatus === 'past_due'}
+                  class:badge-error={(currentUser as any).subscriptionStatus === 'cancelled'}
+                >
+                  {(currentUser as any).subscriptionStatus.toUpperCase()}
+                </span>
+                <span class="ml-2 font-medium">
+                  {(currentUser as any).subscriptionTier?.charAt(0).toUpperCase()}
+                  {(currentUser as any).subscriptionTier?.slice(1)} Plan
+                </span>
+              </div>
+
+              {#if (currentUser as any).subscriptionEndDate}
+                <p class="text-sm">
+                  Renews: {formatDate((currentUser as any).subscriptionEndDate)}
+                </p>
+              {/if}
+
+              <!-- Manage Subscription Button -->
+              <button
+                onclick={handleManageSubscription}
+                class="btn btn-outline btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoadingPortal}
+              >
+                {isLoadingPortal ? 'Loading...' : 'Manage Subscription'}
+              </button>
+            </div>
+          {:else}
+            <div>
+              <span class="badge badge-neutral">FREE</span>
+              <span class="ml-2 text-sm">No active subscription</span>
+            </div>
+            <a href="/pricing" class="btn btn-primary btn-sm mt-2">
+              Upgrade to Pro
+            </a>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {:else}
+    <div class="space-y-4">
+      <div class="skeleton h-32 w-full"></div>
+      <div class="skeleton h-32 w-full"></div>
+    </div>
+  {/if}
+</section>
+```
+
+### Pricing Page Integration
+
+Update pricing page to show current plan and disable current tier button:
+
+```svelte
+<!-- src/routes/pricing/+page.svelte -->
+<script lang="ts">
+  import { authClient } from '$lib/auth-client';
+
+  const PRICE_IDS = {
+    starter: 'price_STARTER_MONTHLY',
+    pro: 'price_PRO_MONTHLY',
+    enterprise: 'price_ENTERPRISE_MONTHLY'
+  };
+
+  let isLoading = false;
+  let sessionData = authClient.useSession();
+  const currentUser = $derived($sessionData?.data?.user);
+  // Get current tier from Better Auth session (via customSession plugin)
+  const currentTier = $derived((currentUser as any)?.subscriptionTier || 'free');
+
+  async function handleCheckout(priceId: string, tier: string) {
+    if (isLoading) return;
+
+    isLoading = true;
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId, tier })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to start checkout');
+      isLoading = false;
+    }
+  }
+</script>
+
+<section class="container mx-auto px-4 py-8">
+  <h1 class="text-4xl font-bold mb-4">Pricing Plans</h1>
+
+  <div class="grid gap-8 md:grid-cols-3">
+    <!-- Starter Tier -->
+    <div
+      class="p-6 border rounded-lg"
+      class:border-green-500={currentTier === 'starter'}
+      class:border-2={currentTier === 'starter'}
+    >
+      {#if currentTier === 'starter'}
+        <div class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded mb-2 inline-block">
+          CURRENT PLAN
+        </div>
+      {/if}
+
+      <h2 class="text-2xl font-semibold mb-3">Starter</h2>
+      <p class="text-3xl font-bold mb-4">$9<span class="text-lg font-normal">/month</span></p>
+
+      <ul class="space-y-2 mb-6">
+        <li>Basic features</li>
+        <li>Up to 10 users</li>
+        <li>Email support</li>
+      </ul>
+
+      <button
+        onclick={() => handleCheckout(PRICE_IDS.starter, 'starter')}
+        disabled={isLoading || currentTier === 'starter'}
+        class="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {#if currentTier === 'starter'}
+          Current Plan
+        {:else if isLoading}
+          Loading...
+        {:else}
+          Choose Starter
+        {/if}
+      </button>
+    </div>
+
+    <!-- Pro Tier (Popular) -->
+    <div
+      class="p-6 border-2 rounded-lg"
+      class:border-green-500={currentTier === 'pro'}
+      class:border-blue-600={currentTier !== 'pro'}
+    >
+      {#if currentTier === 'pro'}
+        <div class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded mb-2 inline-block">
+          CURRENT PLAN
+        </div>
+      {:else}
+        <div class="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded mb-2 inline-block">
+          POPULAR
+        </div>
+      {/if}
+
+      <h2 class="text-2xl font-semibold mb-3">Professional</h2>
+      <p class="text-3xl font-bold mb-4">$29<span class="text-lg font-normal">/month</span></p>
+
+      <ul class="space-y-2 mb-6">
+        <li>All Starter features</li>
+        <li>Unlimited users</li>
+        <li>Priority support</li>
+      </ul>
+
+      <button
+        onclick={() => handleCheckout(PRICE_IDS.pro, 'pro')}
+        disabled={isLoading || currentTier === 'pro'}
+        class="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {#if currentTier === 'pro'}
+          Current Plan
+        {:else if isLoading}
+          Loading...
+        {:else}
+          Choose Professional
+        {/if}
+      </button>
+    </div>
+
+    <!-- Enterprise Tier -->
+    <div
+      class="p-6 border rounded-lg"
+      class:border-green-500={currentTier === 'enterprise'}
+      class:border-2={currentTier === 'enterprise'}
+    >
+      {#if currentTier === 'enterprise'}
+        <div class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded mb-2 inline-block">
+          CURRENT PLAN
+        </div>
+      {/if}
+
+      <h2 class="text-2xl font-semibold mb-3">Enterprise</h2>
+      <p class="text-3xl font-bold mb-4">Custom</p>
+
+      <ul class="space-y-2 mb-6">
+        <li>All Professional features</li>
+        <li>Custom integrations</li>
+        <li>Dedicated support</li>
+      </ul>
+
+      <button
+        onclick={() => handleCheckout(PRICE_IDS.enterprise, 'enterprise')}
+        disabled={isLoading || currentTier === 'enterprise'}
+        class="w-full btn btn-gray disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {#if currentTier === 'enterprise'}
+          Current Plan
+        {:else if isLoading}
+          Loading...
+        {:else}
+          Contact Sales
+        {/if}
+      </button>
+    </div>
+  </div>
+</section>
+```
+
+### Key Implementation Points
+
+1. **Client-Side Redirects**: Both checkout and portal use JSON + `window.location.href` pattern
+2. **Loading States**: Prevent double-clicks, only reset on error
+3. **Better Auth Integration**: Use `customSession` plugin to get Stripe fields in session
+4. **Current Plan Display**: Show "CURRENT PLAN" badge and disable button for active tier
+5. **Error Handling**: User-friendly error messages with alerts
+6. **Success Feedback**: Show confirmation message after successful checkout
+
+### Testing Checklist
+
+- [ ] Customer Portal link works for users with subscriptions
+- [ ] Portal returns to account page correctly
+- [ ] Current plan badge shows correctly on pricing page
+- [ ] Current plan button is disabled
+- [ ] Subscription status shows correctly on account page
+- [ ] "Manage Subscription" button redirects to Stripe Portal
+- [ ] Success message appears after checkout completion
+- [ ] Free users see "Upgrade to Pro" link
+- [ ] Loading states prevent double-clicks
+- [ ] Error messages display for failed operations

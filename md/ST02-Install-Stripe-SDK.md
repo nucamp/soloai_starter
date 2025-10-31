@@ -9,7 +9,7 @@
 
 ### Service Details
 - Stripe Node.js SDK v14.0+ for server-side API operations (stripe)
-- API Version: 2025-06-30.basil or later for latest Checkout features
+- API Version: Uses latest stable version (automatically set by SDK)
 - Support for Checkout Sessions API and webhook processing
 - No client-side Stripe.js or Elements required for hosted checkout
 

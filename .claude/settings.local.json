@@ -8,7 +8,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
       "WebFetch(domain:docs.mautic.org)",
-      "WebFetch(domain:devdocs.mautic.org)"
+      "WebFetch(domain:devdocs.mautic.org)",
+      "WebFetch(domain:docs.stripe.com)"
     ],
     "deny": [],
     "ask": []

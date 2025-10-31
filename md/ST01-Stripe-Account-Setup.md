@@ -10,7 +10,7 @@ Set up Stripe test environment and obtain API credentials to enable payment proc
 ## Requirements
 
 ### Service Details
-- **Stripe API Version**: 2025-06-30.basil or later for latest Checkout features
+- **Stripe API Version**: Uses latest stable API version (automatically set by SDK)
 - **Checkout Type**: Stripe-hosted payment pages (not embedded)
 - **Account Type**: Test mode for development and staging environments
 - **Dashboard Access**: Full access to Stripe Dashboard for product and Checkout configuration

@@ -8,10 +8,10 @@ Create server-side API endpoint to generate Stripe Checkout sessions that redire
 ## Requirements
 
 ### Technical Integration Details
-- **Service**: Stripe Checkout Sessions API v2025-06-30.basil+
+- **Service**: Stripe Checkout Sessions API (latest stable version)
 - **Checkout Mode**: Stripe-hosted pages (not embedded)
 - **Authentication**: Requires STRIPE_SECRET_KEY from ST01-Stripe-Account-Setup.md
-- **Integration Points**: 
+- **Integration Points**:
   - Better Auth user system for customer identification
   - Pricing tier data from P02-Pricing-Tiers.md
   - Existing SvelteKit API route structure
@@ -58,72 +58,156 @@ Create server-side API endpoint to generate Stripe Checkout sessions that redire
 ### API Endpoint
 ```typescript
 // POST /api/stripe/checkout
+// Accepts JSON (not form data for SPA pattern)
 interface CheckoutRequest {
   priceId: string;           // Stripe price ID from configured products
   tier: 'pro' | 'enterprise'; // Subscription tier
 }
 
 interface CheckoutResponse {
-  url: string;    // Stripe Checkout URL for redirect
-  sessionId: string; // Session ID for tracking
+  url: string;  // Stripe Checkout URL for client-side redirect
 }
+
+// IMPORTANT: Server responds with JSON containing URL
+// Client-side code performs redirect using window.location.href
+// This pattern is required for SPAs using fetch() - server-side redirect doesn't work
 ```
 
-### Implementation Example
+### Quick Start Implementation
+**CRITICAL:** For SPAs using fetch(), you MUST return JSON and perform client-side redirect.
+Server-side `redirect()` does NOT work with fetch() - the browser won't follow external redirects.
+
 ```typescript
 // src/routes/api/stripe/checkout/+server.ts
-import { json, redirect } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import Stripe from 'stripe';
 import { env } from '$env/dynamic/private';
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-06-30.basil'
-});
+const stripe = new Stripe(env.STRIPE_SECRET_KEY);
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
   // Verify authentication
-  const session = await locals.auth();
-  if (!session?.user) {
-    return json({ error: 'Authentication required' }, { status: 401 });
+  const session = locals.session;
+  const user = locals.user;
+
+  if (!session || !user) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { priceId, tier } = await request.json();
+  const { priceId } = await request.json();
 
   try {
+    // Create Checkout session
+    const checkoutSession = await stripe.checkout.sessions.create({
+      line_items: [{
+        price: priceId,
+        quantity: 1,
+      }],
+      mode: 'subscription',
+      success_url: `${url.origin}/account?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${url.origin}/pricing?canceled=true`,
+    });
+
+    // ✅ CORRECT: Return JSON for client-side redirect
+    return json({ url: checkoutSession.url });
+
+    // ❌ WRONG: Server-side redirect doesn't work with fetch()
+    // return redirect(303, checkoutSession.url);
+  } catch (error) {
+    console.error('Checkout session creation failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Checkout failed';
+    return json({ error: errorMessage }, { status: 500 });
+  }
+};
+```
+
+### Full Production Implementation
+For production use with customer management and metadata:
+
+```typescript
+// src/routes/api/stripe/checkout/+server.ts
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import stripe from '$lib/stripe/server';
+import { PrismaClient } from '@prisma/client';
+import { STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL } from '$env/static/private';
+
+const prisma = new PrismaClient();
+
+export const POST: RequestHandler = async ({ request, locals, url }) => {
+  // Verify authentication
+  const session = locals.session;
+  const user = locals.user;
+
+  if (!session || !user) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { priceId, tier } = await request.json();
+
+    // Validate required fields
+    if (!priceId) {
+      return json({ error: 'Missing required field: priceId' }, { status: 400 });
+    }
+
     // Create or retrieve Stripe customer
-    let customer;
-    if (session.user.stripeCustomerId) {
-      customer = await stripe.customers.retrieve(session.user.stripeCustomerId);
-    } else {
-      customer = await stripe.customers.create({
-        email: session.user.email,
+    let stripeCustomerId = (user as any).stripeCustomerId;
+
+    if (stripeCustomerId) {
+      // Verify customer still exists in Stripe
+      try {
+        await stripe.customers.retrieve(stripeCustomerId);
+      } catch (error) {
+        console.log(`Customer ${stripeCustomerId} not found, creating new one`);
+        stripeCustomerId = null;
+      }
+    }
+
+    if (!stripeCustomerId) {
+      // Create new Stripe customer
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name || undefined,
         metadata: {
-          userId: session.user.id
+          userId: user.id
         }
       });
+
+      stripeCustomerId = customer.id;
+
       // Update user with Stripe customer ID
-      await updateUserStripeId(session.user.id, customer.id);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId }
+      });
+
+      console.log(`Created customer ${stripeCustomerId} for user ${user.email}`);
     }
+
+    // Configure return URLs
+    const successUrl = STRIPE_SUCCESS_URL || `${url.origin}/account?success=true`;
+    const cancelUrl = STRIPE_CANCEL_URL || `${url.origin}/pricing?canceled=true`;
 
     // Create Checkout session
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer: customer.id,
-      payment_method_types: ['card'],
+      customer: stripeCustomerId,
       mode: 'subscription',
       line_items: [{
         price: priceId,
         quantity: 1
       }],
-      success_url: `${url.origin}/account?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${url.origin}/pricing?canceled=true`,
+      success_url: `${successUrl}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancelUrl,
+      // Add metadata for webhook processing
       metadata: {
-        userId: session.user.id,
+        userId: user.id,
         tier: tier
       },
       subscription_data: {
         metadata: {
-          userId: session.user.id,
+          userId: user.id,
           tier: tier
         }
       },
@@ -132,58 +216,110 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
         address: 'auto',
         name: 'auto'
       },
-      // Collect tax automatically
-      automatic_tax: {
-        enabled: true
-      }
+      // Allow promotion codes
+      allow_promotion_codes: true,
+      // Collect billing address
+      billing_address_collection: 'auto'
+      // Note: automatic_tax is disabled by default - enable when configured
     });
 
-    return json({
-      url: checkoutSession.url,
-      sessionId: checkoutSession.id
-    });
+    console.log(`Created checkout session ${checkoutSession.id} for user ${user.email}`);
+
+    // ✅ CORRECT: Return checkout URL for client-side redirect
+    return json({ url: checkoutSession.url });
 
   } catch (error) {
     console.error('Checkout session creation failed:', error);
-    return json(
-      { error: 'Failed to create checkout session' },
-      { status: 500 }
-    );
+
+    // Return error response
+    const errorMessage = error instanceof Error ? error.message : 'Checkout failed';
+    return json({ error: errorMessage }, { status: 500 });
   }
 };
 ```
 
+**Important Notes:**
+- Removed `payment_method_types` - Stripe automatically shows enabled payment methods from Dashboard
+- Returns JSON with URL instead of server-side redirect (required for SPAs)
+- Includes proper error handling with user-friendly messages
+- Validates customer existence before using cached ID
+
 ### Frontend Integration
+
+**Recommended Pattern: Fetch with Client-Side Redirect**
+
 ```svelte
 <!-- src/routes/pricing/+page.svelte -->
 <script lang="ts">
+  import { authClient } from '$lib/auth-client';
+
+  const PRICE_IDS = {
+    starter: 'price_STARTER_MONTHLY',
+    pro: 'price_PRO_MONTHLY',
+    enterprise: 'price_ENTERPRISE_MONTHLY'
+  };
+
+  let isLoading = false;
+  let sessionData = authClient.useSession();
+  const currentUser = $derived($sessionData?.data?.user);
+  const currentTier = $derived((currentUser as any)?.subscriptionTier || 'free');
+
   async function handleCheckout(priceId: string, tier: string) {
+    if (isLoading) return; // Prevent double-clicks
+
+    isLoading = true;
     try {
+      // Call API to create checkout session
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ priceId, tier })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Checkout failed');
+        throw new Error(data.error || 'Failed to create checkout session');
       }
 
-      const { url } = await response.json();
-      
-      // Redirect to Stripe-hosted checkout page
-      window.location.href = url;
+      // ✅ CRITICAL: Client-side redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
     } catch (error) {
       console.error('Checkout error:', error);
-      // Handle error with user feedback
+      alert(error instanceof Error ? error.message : 'Failed to start checkout. Please try again.');
+      isLoading = false; // Only reset on error
     }
+    // Don't reset isLoading on success - page will navigate away
   }
 </script>
 
-<button on:click={() => handleCheckout('price_xxx', 'pro')}>
-  Subscribe to Pro
+<button
+  onclick={() => handleCheckout(PRICE_IDS.pro, 'pro')}
+  disabled={isLoading || currentTier === 'pro'}
+  class="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {#if currentTier === 'pro'}
+    Current Plan
+  {:else if isLoading}
+    Loading...
+  {:else}
+    Choose Professional
+  {/if}
 </button>
 ```
+
+**Key Implementation Points:**
+1. **Loading State**: Prevents double-clicks and provides user feedback
+2. **Error Handling**: Shows user-friendly error messages
+3. **Client-Side Redirect**: Uses `window.location.href` for external URLs
+4. **Don't Reset on Success**: Loading state remains true as page navigates away
+5. **Current Tier Check**: Disables button if user already has the plan
 
 ### Checkout Session Configuration
 
