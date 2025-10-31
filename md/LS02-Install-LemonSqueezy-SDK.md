@@ -42,10 +42,12 @@ Install and configure LemonSqueezy Node.js SDK for server-side operations to cre
 ### Environment Variables
 ```bash
 LEMONSQUEEZY_API_KEY=test_xxx
-LEMONSQUEEZY_STORE_ID=123456
+LEMONSQUEEZY_STORE_ID=123456  # Optional: Fallback if API call fails
 LEMONSQUEEZY_WEBHOOK_SECRET=whsec_xxx
 LEMONSQUEEZY_TEST_MODE=true
 ```
+
+**Note**: The system automatically fetches the first store ID from your LemonSqueezy account. The `LEMONSQUEEZY_STORE_ID` is only used as a fallback if the API call fails.
 
 ### API Configuration
 - Base URL: https://api.lemonsqueezy.com/v1/
@@ -100,7 +102,7 @@ export async function createCheckoutUrl(
   cancelUrl: string
 ) {
   try {
-    const storeId = await getStoreId(); // getStoreId is now async
+    const storeId = await getStoreId(); // Fetches first store from API
     const testMode = isTestMode(); // Use environment variable
 
     const checkout = await createCheckout(storeId, variantId, {
@@ -182,9 +184,10 @@ export function verifyWebhookSignature(
 // Extend src/lib/env.ts
 const requiredEnvVars = [
   'LEMONSQUEEZY_API_KEY',
-  'LEMONSQUEEZY_STORE_ID',
   'LEMONSQUEEZY_WEBHOOK_SECRET'
 ];
+
+// Optional: LEMONSQUEEZY_STORE_ID (used as fallback if API call fails)
 
 export function validateLemonSqueezyEnv() {
   for (const varName of requiredEnvVars) {
@@ -192,11 +195,16 @@ export function validateLemonSqueezyEnv() {
       throw new Error(`Missing required environment variable: ${varName}`);
     }
   }
-  
+
   // Validate API key format
-  if (!process.env.LEMONSQUEEZY_API_KEY?.startsWith('test_') && 
+  if (!process.env.LEMONSQUEEZY_API_KEY?.startsWith('test_') &&
       process.env.LEMONSQUEEZY_TEST_MODE === 'true') {
     console.warn('Using production API key in test mode');
+  }
+
+  // Warn if STORE_ID is not set (will use API to fetch)
+  if (!process.env.LEMONSQUEEZY_STORE_ID) {
+    console.log('LEMONSQUEEZY_STORE_ID not set, will fetch from API');
   }
 }
 ```
