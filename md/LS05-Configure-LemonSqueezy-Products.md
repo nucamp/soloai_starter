@@ -3,6 +3,8 @@
 ## Overview
 Configure subscription products and pricing plans in the LemonSqueezy dashboard for use with LemonSqueezy-hosted checkout pages. Set up products with automatic tax handling through LemonSqueezy's merchant of record service, enabling global sales without tax compliance complexity.
 
+**Integration Context**: This product configuration is for non-US users who are assigned to LemonSqueezy based on their Paraglide locale (all locales except `en`). Stripe products (ST06-Configure-Stripe-Products.md) are already configured and serve US users. Both product catalogs should have identical pricing and tier structures to ensure consistent pricing across all users.
+
 ## Requirements
 
 ### Functional Requirements
@@ -118,7 +120,9 @@ Configure subscription products and pricing plans in the LemonSqueezy dashboard 
 ## Integration Context
 
 ### Prerequisite Dependencies
-- LemonSqueezy account setup and API credentials from LS01-LemonSqueezy-Account.md  
+- **Required**: ST06-Configure-Stripe-Products.md - Stripe products already configured with pricing structure to match
+- **Required**: PG02-Paraglide-Configure-Langs.md - Locale system for provider assignment
+- LemonSqueezy account setup and API credentials from LS01-LemonSqueezy-Account.md
 - LemonSqueezy SDK installation and configuration from LS02-Install-LemonSqueezy-SDK.md
 - Existing pricing tier display from P02-Pricing-Tiers.md
 - Better Auth user system for customer identification
@@ -132,8 +136,9 @@ Configure subscription products and pricing plans in the LemonSqueezy dashboard 
 ### Validation Requirements
 - Product IDs must be validated in application before creating checkout sessions
 - Metadata structure must be consistent across all tiers for feature mapping
-- Pricing must match existing Stripe configuration for payment processor consistency
-- Trial periods must align with application business logic and user experience
+- **CRITICAL**: Pricing must exactly match existing Stripe configuration (ST06) to ensure consistent pricing for all users
+- Trial periods must match Stripe configuration for consistent user experience
+- Tier names and feature sets must align with Stripe products for unified subscription management
 
 ## Additional Context
 

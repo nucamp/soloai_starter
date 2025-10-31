@@ -5,6 +5,8 @@ Install and configure LemonSqueezy Node.js SDK for server-side operations to cre
 
 **Feature Type**: Technical Integration
 
+**Integration Context**: This SDK installation supports the LemonSqueezy payment provider for non-US users (all locales except `en`). The Stripe SDK (ST02-Install-Stripe-SDK.md) is already installed and serves US users. Both SDKs operate in parallel, with locale-based routing determining which provider handles each checkout request.
+
 ## Requirements
 
 ### Functional Requirements
@@ -202,6 +204,13 @@ export function validateLemonSqueezyEnv() {
 ### SDK Usage Pattern
 Unlike Stripe which requires both client and server SDKs, LemonSqueezy only needs server-side SDK since all payment collection happens on their hosted pages. This simplifies the integration and reduces client-side bundle size.
 
+### Dual Provider Architecture
+The application runs both Stripe and LemonSqueezy SDKs simultaneously:
+- **Stripe SDK** (from ST02-Install-Stripe-SDK.md): Handles US users (locale: `en`)
+- **LemonSqueezy SDK**: Handles non-US users (all other locales)
+
+The pricing page and checkout logic use Paraglide's active locale to determine which provider to use, ensuring seamless payment processing for all users regardless of location.
+
 ### Migration Path
 For teams migrating from embedded checkout:
 1. Remove any client-side LemonSqueezy code
@@ -210,6 +219,8 @@ For teams migrating from embedded checkout:
 4. Simplify error handling since payment errors occur on LemonSqueezy's pages
 
 ## Prerequisites
+- **Required**: ST02-Install-Stripe-SDK.md - Stripe SDK already installed for US users
+- **Required**: PG02-Paraglide-Configure-Langs.md - Locale system for provider selection
 - LS01-LemonSqueezy-Account.md - Account setup and API credentials
 - EV01-Env-File-Setup.md - Environment variable management
 - EV02-Env-Validation.md - Environment validation patterns

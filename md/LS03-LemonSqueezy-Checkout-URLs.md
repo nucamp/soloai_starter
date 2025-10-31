@@ -5,6 +5,8 @@ Create server-side API endpoint to generate LemonSqueezy checkout URLs that redi
 
 **Feature Type**: Technical Integration
 
+**Integration Context**: This feature implements checkout URL generation for non-US users only. The Stripe checkout system (ST03-Stripe-Checkout-Sessions.md) is already implemented and serves US users (locale: `en`). The pricing page automatically routes users to the appropriate payment provider based on their active Paraglide locale.
+
 ## Requirements
 
 ### User Stories
@@ -259,20 +261,142 @@ If migrating from embedded forms:
 4. Simplify error handling
 5. Remove PCI compliance requirements
 
-### Dual Payment Provider Support
-The application can support both Stripe and LemonSqueezy:
-```typescript
-// Choose provider based on user location or preference
-const useL lemonSqueezy = userCountry === 'EU' || userPreference === 'lemonsqueezy';
+### Locale-Based Payment Provider Selection
 
-if (useLemonSqueezy) {
-  // Redirect to LemonSqueezy checkout
+The application automatically selects the payment provider based on the user's active Paraglide locale:
+
+```typescript
+// Choose provider based on Paraglide locale
+import { languageTag } from '$lib/paraglide/runtime';
+
+const isUSUser = languageTag() === 'en';
+
+if (isUSUser) {
+  // Redirect to Stripe checkout (ST03-Stripe-Checkout-Sessions.md)
+  await handleStripeCheckout(priceId, tier);
 } else {
-  // Redirect to Stripe checkout
+  // Redirect to LemonSqueezy checkout
+  await handleLemonSqueezyCheckout(variantId, tier);
 }
 ```
 
+**Implementation on Pricing Page:**
+
+```svelte
+<!-- src/routes/pricing/+page.svelte -->
+<script lang="ts">
+  import { authClient } from '$lib/auth-client';
+  import { languageTag } from '$lib/paraglide/runtime';
+
+  // Stripe price IDs for US users
+  const STRIPE_PRICE_IDS = {
+    starter: 'price_STARTER_MONTHLY',
+    pro: 'price_PRO_MONTHLY',
+    enterprise: 'price_ENTERPRISE_MONTHLY'
+  };
+
+  // LemonSqueezy variant IDs for non-US users
+  const LEMONSQUEEZY_VARIANT_IDS = {
+    starter: 'variant_STARTER_MONTHLY',
+    pro: 'variant_PRO_MONTHLY',
+    enterprise: 'variant_ENTERPRISE_MONTHLY'
+  };
+
+  let isLoading = false;
+  let sessionData = authClient.useSession();
+  const currentUser = $derived($sessionData?.data?.user);
+  const currentTier = $derived((currentUser as any)?.subscriptionTier || 'free');
+
+  // Determine payment provider based on locale
+  const isUSUser = $derived(languageTag() === 'en');
+  const paymentProvider = $derived(isUSUser ? 'Stripe' : 'LemonSqueezy');
+
+  async function handleCheckout(tier: string) {
+    if (isLoading) return;
+
+    isLoading = true;
+    try {
+      if (isUSUser) {
+        // Use Stripe for US users (locale: en)
+        const priceId = STRIPE_PRICE_IDS[tier];
+        const response = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priceId, tier })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      } else {
+        // Use LemonSqueezy for non-US users
+        const variantId = LEMONSQUEEZY_VARIANT_IDS[tier];
+        const response = await fetch('/api/lemonsqueezy/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variantId, tier })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to start checkout');
+      isLoading = false;
+    }
+  }
+</script>
+
+<section class="container mx-auto px-4 py-8">
+  <h1 class="text-4xl font-bold mb-4">Pricing Plans</h1>
+
+  <!-- Show which payment provider is being used -->
+  <p class="text-sm text-gray-600 mb-4">
+    Payment processed by {paymentProvider}
+  </p>
+
+  <div class="grid gap-8 md:grid-cols-3">
+    <!-- Pricing tier cards -->
+    <div class="p-6 border rounded-lg">
+      <h2 class="text-2xl font-semibold mb-3">Professional</h2>
+      <p class="text-3xl font-bold mb-4">$29<span class="text-lg font-normal">/month</span></p>
+
+      <button
+        onclick={() => handleCheckout('pro')}
+        disabled={isLoading || currentTier === 'pro'}
+        class="w-full btn btn-primary disabled:opacity-50"
+      >
+        {#if currentTier === 'pro'}
+          Current Plan
+        {:else if isLoading}
+          Loading...
+        {:else}
+          Choose Professional
+        {/if}
+      </button>
+    </div>
+  </div>
+</section>
+```
+
+**Key Implementation Points:**
+1. **Locale Detection**: Uses `languageTag()` from Paraglide to determine user locale
+2. **Provider Selection**: `en` locale → Stripe; all others → LemonSqueezy
+3. **Unified UX**: Same button/flow for users, different backend based on locale
+4. **Transparent Routing**: Users don't need to choose provider manually
+5. **Consistent Pricing**: Same displayed prices across both providers
+
 ## Prerequisites
+- **Required**: ST03-Stripe-Checkout-Sessions.md - Stripe checkout already implemented for US users
+- **Required**: PG02-Paraglide-Configure-Langs.md - Locale system for provider selection
 - LS01-LemonSqueezy-Account.md - Account and API setup
 - LS02-Install-LemonSqueezy-SDK.md - SDK installation
 - LS05-Configure-LemonSqueezy-Products.md - Product configuration

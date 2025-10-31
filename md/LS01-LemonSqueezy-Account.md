@@ -7,6 +7,8 @@ Set up LemonSqueezy test environment and obtain API credentials for payment proc
 
 **Business Value**: Enables global SaaS sales with LemonSqueezy acting as merchant of record, handling all tax compliance, VAT, and payment processing through their optimized hosted checkout experience.
 
+**Integration Context**: This feature implements LemonSqueezy as the payment provider for non-US users, complementing the existing Stripe integration (ST01-ST06) which serves US users. The payment provider is automatically selected based on the user's active Paraglide locale - users with locale `en` use Stripe, while all other locales use LemonSqueezy.
+
 ## Requirements
 
 ### Service Details
@@ -107,7 +109,11 @@ No new database tables required for initial setup. Future webhook integration wi
 - **Global Selling**: Simplified international sales without tax registration
 
 ### Integration Strategy
-This implementation establishes LemonSqueezy as a secondary payment provider alongside Stripe from ST01-Stripe-Account-Setup.md. The application will support both payment processors, allowing users to choose based on their geographic location and preferences.
+This implementation establishes LemonSqueezy as the payment provider for non-US users alongside Stripe from ST01-Stripe-Account-Setup.md which serves US users. The application automatically selects the appropriate payment processor based on the user's active Paraglide locale:
+- **US Users (locale: `en`)**: Stripe checkout and subscription management
+- **Non-US Users (all other locales)**: LemonSqueezy checkout and subscription management
+
+This locale-based provider selection ensures optimal payment experience and tax handling for users globally while maintaining consistent subscription management across both providers.
 
 ### Account Types
 - **Test Account**: For development and staging environments
@@ -116,7 +122,8 @@ This implementation establishes LemonSqueezy as a secondary payment provider alo
 - **Tax Settings**: Automatic VAT handling and international compliance
 
 ### Prerequisites
-- Completed ST01-Stripe-Account-Setup.md (for comparison and dual-provider setup)
+- **Required**: Completed ST01-ST06 Stripe integration series (serves as primary provider for US users)
+- **Required**: Completed PG02-Paraglide-Configure-Langs.md (for locale-based provider detection)
 - Completed P02-Pricing-Tiers.md (for subscription tier mapping)
 - Completed EV01-Env-File-Setup.md (for credential management patterns)
 - Completed AU02-BetterAuth-Init.md (for user system integration)

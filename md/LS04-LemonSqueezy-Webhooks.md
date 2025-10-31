@@ -7,6 +7,8 @@ Handle LemonSqueezy webhook events from hosted checkout completions and subscrip
 
 **Feature Type**: Technical Integration
 
+**Integration Context**: This webhook handler processes subscription events for non-US users who use LemonSqueezy for payments. The Stripe webhook handler (ST04-Stripe-Webhooks.md) is already implemented and processes events for US users. Both webhook systems operate independently in parallel, updating the same user subscription fields based on the payment provider used.
+
 ## Requirements
 
 ### Functional Requirements
@@ -48,10 +50,14 @@ Handle LemonSqueezy webhook events from hosted checkout completions and subscrip
 - **Validation**: Environment validation system from EV02-Env-Validation.md for webhook configuration
 
 ### Database Changes
-- **User Table Extensions**: Add lemon_squeezy_customer_id (string), subscription_status (enum), subscription_tier (string), subscription_end_date (datetime), lemon_squeezy_subscription_id (string)
-- **New Tables**: webhook_events table for event tracking, subscription_history table for audit trail
-- **Indexes**: Add indexes on user.lemon_squeezy_customer_id, webhook_events.event_id, and subscription_history.user_id for query performance
-- **Migrations**: Create Prisma migration files for schema updates with proper rollback support
+- **User Table Extensions**: Add lemon_squeezy_customer_id (string), lemon_squeezy_subscription_id (string) fields to the existing user table
+  - Note: subscription_status, subscription_tier, and subscription_end_date are already added by ST04-Stripe-Webhooks.md
+  - Both Stripe and LemonSqueezy webhooks update the same subscription status fields
+  - Provider-specific IDs (stripeCustomerId vs lemon_squeezy_customer_id) allow tracking which provider the user is using
+- **Webhook Events Table**: Extend the existing webhook_events table from ST04 to support both Stripe and LemonSqueezy events
+  - Add provider field to distinguish between 'stripe' and 'lemonsqueezy' events
+- **Indexes**: Add indexes on user.lemon_squeezy_customer_id for query performance
+- **Migrations**: Create Prisma migration files to add LemonSqueezy-specific fields to existing schema
 
 ### API Changes
 - **New Endpoint**: POST /api/lemonsqueezy/webhook for receiving and processing webhook events
@@ -68,6 +74,8 @@ Handle LemonSqueezy webhook events from hosted checkout completions and subscrip
 ## Integration Points
 
 ### Prerequisites
+- **Required**: ST04-Stripe-Webhooks.md - Stripe webhook handler and database schema already implemented
+- **Required**: PG02-Paraglide-Configure-Langs.md - Locale system that determines which provider users are assigned to
 - **LS01-LemonSqueezy-Account.md**: LemonSqueezy account setup with webhook secret configuration
 - **LS02-Install-LemonSqueezy-SDK.md**: LemonSqueezy SDK installation and initialization
 - **LS03-LemonSqueezy-Checkout-URLs.md**: Checkout flow creating customer and subscription records
@@ -150,3 +158,16 @@ Since LemonSqueezy acts as merchant of record:
 - Dispute management handled by LemonSqueezy
 
 This webhook handler ensures seamless integration between LemonSqueezy's hosted checkout/portal and the application's subscription management system.
+
+### Unified Subscription Data Model
+
+Both Stripe and LemonSqueezy webhooks update the same subscription fields on the user model:
+- **subscription_status**: 'active', 'past_due', 'cancelled', etc.
+- **subscription_tier**: 'pro', 'enterprise', etc.
+- **subscription_end_date**: Next billing or cancellation date
+
+Provider-specific fields track which service is being used:
+- **stripeCustomerId** + **subscriptionId**: Set when using Stripe (US users)
+- **lemon_squeezy_customer_id** + **lemon_squeezy_subscription_id**: Set when using LemonSqueezy (non-US users)
+
+This unified model allows the application's UI and access control logic to work consistently regardless of which payment provider the user is assigned to based on their locale.
