@@ -1,4 +1,4 @@
-# TS02-Playwright-Setup.md
+# TS04: Playwright E2E Testing Setup
 
 ## Overview
 Set up Playwright v1.40+ as the end-to-end testing framework for the SvelteKit SaaS application to test complete user workflows including authentication, content management, payment processing, and multilingual functionality. This establishes comprehensive browser automation testing to ensure all integrated systems work together correctly.
@@ -44,7 +44,7 @@ Set up Playwright v1.40+ as the end-to-end testing framework for the SvelteKit S
 - **Test Utilities**: `@testing-library/playwright`, custom test helpers
 - **Environment Management**: `dotenv` for test environment variables
 - **Visual Testing**: Playwright's built-in screenshot comparison
-- **Existing Integration**: Build upon TS01-Vitest-Setup.md patterns and test database setup
+- **Existing Integration**: Build upon TS03-Vitest-Setup.md patterns and test database setup
 
 ### Environment Variables
 - `TEST_BASE_URL`: Base URL for test application instance (default: http://localhost:4173)
@@ -129,7 +129,8 @@ Set up Playwright v1.40+ as the end-to-end testing framework for the SvelteKit S
 - **Result Reporting**: JUnit XML and HTML reports for CI/CD integration
 
 ### Prerequisites
-- Completed TS01-Vitest-Setup.md for unit testing foundation
+- **TS02-Data-TestID-Setup.md** (Test IDs added to components - REQUIRED)
+- Completed TS03-Vitest-Setup.md for unit testing foundation
 - Existing Better Auth setup from AU01-Install-BetterAuth.md through AU06-Session-Persistence.md
 - Strapi CMS configuration from SP01-Strapi-Container-Setup.md through SP05-Strapi-Frontend-Connect.md
 - Payment integration from ST01-Stripe-Account-Setup.md through ST06-Configure-Stripe-Products.md
@@ -137,7 +138,7 @@ Set up Playwright v1.40+ as the end-to-end testing framework for the SvelteKit S
 
 ### Future Integration Points
 - **CI01-GitHub-Actions-Init.md**: Integration with automated CI/CD pipeline
-- **TS03-Write-Basic-Tests.md**: Specific test implementations for authentication and payment flows
+- **TS05-Write-Basic-Tests.md**: Specific test implementations for authentication and payment flows
 - **LA01-Launch-Checklist.md**: Production readiness validation through comprehensive E2E testing
 
 ## Success Criteria

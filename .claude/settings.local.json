@@ -10,7 +10,9 @@
       "WebFetch(domain:docs.mautic.org)",
       "WebFetch(domain:devdocs.mautic.org)",
       "WebFetch(domain:docs.stripe.com)",
-      "WebFetch(domain:klaro.org)"
+      "WebFetch(domain:klaro.org)",
+      "WebFetch(domain:claudelog.com)",
+      "WebFetch(domain:www.cometapi.com)"
     ],
     "deny": [],
     "ask": []

@@ -1,4 +1,4 @@
-# Vitest Unit Testing Setup
+# TS03: Vitest Unit Testing Setup
 
 ## Overview
 - Set up Vitest as the unit testing framework for the SvelteKit SaaS application
@@ -96,6 +96,7 @@ src/
 - Verify content fetching from Strapi integration
 
 ## Prerequisites
+- **TS02-Data-TestID-Setup.md** (Test IDs added to components - REQUIRED)
 - DB01-DB-Container-Setup.md (MySQL test database)
 - AU02-BetterAuth-Init.md (Authentication system)
 - SP05-Strapi-Frontend-Connect.md (CMS integration)
@@ -128,6 +129,68 @@ src/
 - File system operations and uploads
 - Network requests and HTTP clients
 - Authentication session management
+
+## Known Issues & Solutions
+
+### Version Compatibility
+**Issue**: `@vitest/coverage-v8` version mismatch
+- Installing latest `@vitest/coverage-v8@4.x` causes peer dependency conflicts with `vitest@3.2.4`
+- Error: `peer vitest@"4.0.6" from @vitest/coverage-v8@4.0.6`
+
+**Solution**: Install version-specific packages matching your Vitest version:
+```bash
+npm install --save-dev @vitest/coverage-v8@3.2.4 @vitest/ui@3.2.4
+```
+
+### Null/Undefined Handling in Utility Functions
+**Issue**: Test failures when passing `null` or `undefined` to utility functions
+- Functions like `extractStripeSubscriptionId()` fail with "Cannot read properties of null"
+
+**Solution**: Add null checks at the beginning of utility functions:
+```typescript
+export function extractStripeSubscriptionId(event: any): string | null {
+	if (!event) return null;  // Add this guard
+	// ... rest of function
+}
+```
+
+### Browser Test SSR Cleanup Errors
+**Issue**: Browser component tests cause SSR module errors during cleanup
+- Error: `transport was disconnected, cannot call "fetchModule"`
+- Process hangs for 10 seconds before force-closing
+
+**Solution**: Update `vite.config.ts` browser test configuration:
+```typescript
+{
+	test: {
+		name: 'client',
+		environment: 'browser',
+		browser: {
+			enabled: true,
+			provider: 'playwright',
+			instances: [{ browser: 'chromium' }],
+			headless: true  // Add this
+		},
+		exclude: ['src/lib/server/**', 'src/routes/api/**'],  // Exclude server-only code
+		poolOptions: {  // Add this
+			threads: {
+				singleThread: true
+			}
+		},
+		testTimeout: 10000  // Add this
+	}
+}
+```
+
+### Playwright E2E Test Issues
+**Note**: For Playwright E2E test-specific issues (localStorage SecurityError, selector best practices, etc.), see **TS05-Write-Basic-Tests.md** under "Playwright E2E Testing Best Practices".
+
+Common E2E issues documented in TS03:
+- localStorage SecurityError in `beforeEach` hooks
+- Selector best practices for dynamic content
+- Navigation in page objects
+- Error message testing with ARIA attributes
+- CMS/External data dependencies
 
 ## Success Criteria
 - All existing functionality covered by appropriate test types
